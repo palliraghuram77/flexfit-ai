@@ -1,11 +1,11 @@
 # FlexFit AI
 
-FlexFit AI is a portfolio-ready fitness web app inspired by an AI-generated Base44 landing page and rebuilt as clean, editable front-end code. It is designed to be easy to publish on GitHub Pages and easy for AI coding tools such as Antigravity, Codex, Cursor, and Gemini CLI to understand.
+FlexFit AI is a responsive fitness web app that helps users plan workouts, estimate daily nutrition targets, and track healthy habits from one simple interface. The project focuses on clean front-end implementation, practical user flows, and a polished layout suitable for a portfolio or resume.
 
 ## Live Project Features
 
 - Responsive fitness landing page with mobile navigation
-- AI-style workout planner based on goal, level, equipment, and training days
+- Smart workout planner based on goal, level, equipment, and training days
 - Calorie and macro calculator using client-side JavaScript
 - Weekly progress tracker saved with `localStorage`
 - Testimonials, contact form demo, and polished portfolio copy
@@ -58,18 +58,18 @@ git push -u origin main
 
 This project includes:
 
-- `AGENTS.md` for cross-tool AI coding instructions
+- `AGENTS.md` for cross-tool development instructions
 - `GEMINI.md` for Antigravity/Gemini-specific project context
-- Simple static file structure that an agent can inspect without package installation
+- Simple static file structure that can be inspected without package installation
 - Clear test and verification steps
 
 Open the folder in Antigravity and ask it to read `README.md`, `AGENTS.md`, and `GEMINI.md` before making changes.
 
 ## Resume Bullets
 
-- Built a responsive AI fitness web app using HTML, CSS, and JavaScript with workout planning, macro calculation, and local progress tracking.
+- Built a responsive fitness web app using HTML, CSS, and JavaScript with workout planning, macro calculation, and local progress tracking.
 - Implemented client-side state management with `localStorage`, form validation, responsive navigation, and accessible semantic HTML.
-- Prepared the project for GitHub Pages deployment with developer documentation and AI-agent instructions for Antigravity-compatible workflows.
+- Prepared the project for GitHub Pages deployment with clear developer documentation and Antigravity-compatible workflow notes.
 
 ## Technical Skills Needed
 
@@ -81,7 +81,7 @@ To build and improve this project, focus on:
 - Browser storage: `localStorage`
 - UX thinking: user journeys, clear labels, accessible forms
 - Git/GitHub: commits, branches, remotes, GitHub Pages
-- AI IDE workflow: giving clear prompts, reading generated diffs, testing changes
+- Developer workflow: reading diffs, testing changes, and maintaining clean documentation
 
 ## Credits
 
