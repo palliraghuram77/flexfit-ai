@@ -49,6 +49,7 @@ exports.handler = async (event) => {
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
+    console.error("scan-food: GEMINI_API_KEY missing");
     return { statusCode: 500, body: JSON.stringify({ error: "GEMINI_API_KEY is not configured on the server" }) };
   }
 
@@ -56,15 +57,18 @@ exports.handler = async (event) => {
   try {
     payload = JSON.parse(event.body || "{}");
   } catch {
+    console.error("scan-food: invalid JSON body from client");
     return { statusCode: 400, body: JSON.stringify({ error: "Invalid JSON body" }) };
   }
 
   const image = payload.image;
   const mimeType = payload.mimeType || "image/jpeg";
   if (!image || typeof image !== "string") {
+    console.error("scan-food: missing image in request body");
     return { statusCode: 400, body: JSON.stringify({ error: "image (base64 string) is required" }) };
   }
   if (image.length > MAX_BASE64_LENGTH) {
+    console.error("scan-food: image too large,", image.length, "base64 chars");
     return { statusCode: 413, body: JSON.stringify({ error: "Photo is too large - try a smaller image" }) };
   }
 
@@ -91,6 +95,7 @@ exports.handler = async (event) => {
 
     if (!response.ok) {
       const detail = await response.text();
+      console.error("scan-food: Gemini request failed,", response.status, detail.slice(0, 500));
       return { statusCode: 502, body: JSON.stringify({ error: "Gemini request failed", detail: detail.slice(0, 300) }) };
     }
 
@@ -98,6 +103,7 @@ exports.handler = async (event) => {
     const parts = data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts;
     const raw = Array.isArray(parts) ? parts.map((p) => p.text || "").join("").trim() : "";
     if (!raw) {
+      console.error("scan-food: Gemini returned no text in candidates", JSON.stringify(data).slice(0, 500));
       return { statusCode: 502, body: JSON.stringify({ error: "Gemini returned an empty reply" }) };
     }
 
@@ -105,6 +111,7 @@ exports.handler = async (event) => {
     try {
       parsed = JSON.parse(raw);
     } catch {
+      console.error("scan-food: could not JSON.parse Gemini output:", raw.slice(0, 500));
       return { statusCode: 502, body: JSON.stringify({ error: "Gemini did not return valid JSON" }) };
     }
 
@@ -143,6 +150,7 @@ exports.handler = async (event) => {
       }),
     };
   } catch (err) {
+    console.error("scan-food: uncaught error,", err && err.stack || err);
     return { statusCode: 502, body: JSON.stringify({ error: "Request to Gemini failed", detail: String(err && err.message || err) }) };
   }
 };
