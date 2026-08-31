@@ -2,17 +2,45 @@
 // Keeps the Gemini API key on the server - the browser never sees it.
 // Frontend contract (see analyzeFoodPhoto in script.js):
 //   POST /api/scan-food  { image: base64String, mimeType: string }
-//   -> 200 { items: [{ name, grams }], calories: number }
+//   -> 200 {
+//        items: [{ name, grams, calories, protein, carbs, fat }],
+//        calories, protein, carbs, fat   (totals, summed here from items)
+//      }
 
 const MODEL = "gemini-3.6-flash";
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/" + MODEL + ":generateContent";
 const MAX_BASE64_LENGTH = 6_000_000; // roughly a 4.5MB photo once decoded
 
 const PROMPT =
-  "Identify the food items visible in this photo of a plate or meal. " +
-  "Estimate a reasonable portion size in grams for each item and the total calories for everything shown. " +
-  'Respond ONLY as JSON matching this shape: {"items": [{"name": string, "grams": number}], "calories": number}. ' +
-  "If you cannot identify any food in the image, return an empty items array and calories: 0.";
+  "You are a careful nutrition analyst looking at a photo of a plate or meal. " +
+  "Look closely and list EVERY distinct food item you can see as its own entry - don't lump different foods into one item " +
+  "(e.g. list \"grilled chicken\" and \"steamed rice\" and \"broccoli\" separately, not \"chicken with rice and vegetables\"). " +
+  "For each item, estimate: a realistic portion size in grams (use the plate size, cutlery, and any hand/utensil in frame as scale references), " +
+  "and its calories, protein (g), carbs (g), and fat (g) for that portion, based on standard nutrition data for that food. " +
+  "Give your single best-estimate number for each field, not a range. " +
+  "If you cannot identify any food in the image, return an empty items array.";
+
+const RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    items: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING" },
+          grams: { type: "NUMBER" },
+          calories: { type: "NUMBER" },
+          protein: { type: "NUMBER" },
+          carbs: { type: "NUMBER" },
+          fat: { type: "NUMBER" },
+        },
+        required: ["name", "grams", "calories", "protein", "carbs", "fat"],
+      },
+    },
+  },
+  required: ["items"],
+};
 
 exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
@@ -51,7 +79,13 @@ exports.handler = async (event) => {
             parts: [{ text: PROMPT }, { inlineData: { mimeType, data: image } }],
           },
         ],
-        generationConfig: { responseMimeType: "application/json", maxOutputTokens: 300, temperature: 0.4 },
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: RESPONSE_SCHEMA,
+          maxOutputTokens: 1536,
+          temperature: 0.3,
+          thinkingConfig: { thinkingLevel: "low" },
+        },
       }),
     });
 
@@ -75,14 +109,39 @@ exports.handler = async (event) => {
     }
 
     const items = Array.isArray(parsed.items)
-      ? parsed.items.slice(0, 12).map((item) => ({
+      ? parsed.items.slice(0, 15).map((item) => ({
           name: String((item && item.name) || "Item").slice(0, 60),
-          grams: Number(item && item.grams) || undefined,
+          grams: Number(item && item.grams) || 0,
+          calories: Number(item && item.calories) || 0,
+          protein: Number(item && item.protein) || 0,
+          carbs: Number(item && item.carbs) || 0,
+          fat: Number(item && item.fat) || 0,
         }))
       : [];
-    const calories = Number(parsed.calories) || 0;
 
-    return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items, calories }) };
+    // Sum totals ourselves rather than trusting a separate model-stated total,
+    // so the totals always match what's actually shown per item.
+    const totals = items.reduce(
+      (sum, item) => ({
+        calories: sum.calories + item.calories,
+        protein: sum.protein + item.protein,
+        carbs: sum.carbs + item.carbs,
+        fat: sum.fat + item.fat,
+      }),
+      { calories: 0, protein: 0, carbs: 0, fat: 0 }
+    );
+
+    return {
+      statusCode: 200,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        items,
+        calories: Math.round(totals.calories),
+        protein: Math.round(totals.protein),
+        carbs: Math.round(totals.carbs),
+        fat: Math.round(totals.fat),
+      }),
+    };
   } catch (err) {
     return { statusCode: 502, body: JSON.stringify({ error: "Request to Gemini failed", detail: String(err && err.message || err) }) };
   }

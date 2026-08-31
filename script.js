@@ -10,7 +10,7 @@ const DEFAULT_PROFILE = {
   goals: ["Lean bulk", "Boxing conditioning", "Body recomposition", "Increase strength while lean", "Run a 10K", "Return from injury"],
 };
 const DEFAULT_TARGETS = { calories: 2850, protein: 180, carbs: 350, fat: 80 };
-const SPORT_CHOICES = ["Bodybuilding", "Running", "Martial Arts", "Cycling", "Swimming", "Yoga", "Football", "Tennis", "Basketball"];
+const SPORT_CHOICES = ["Bodybuilding", "Powerlifting", "CrossFit", "Running", "Trail Running", "Sprinting", "Martial Arts", "Boxing", "Kickboxing", "Brazilian Jiu-Jitsu", "Wrestling", "Cycling", "Mountain Biking", "Swimming", "Triathlon", "Yoga", "Pilates", "Calisthenics", "Rock Climbing", "Hiking", "Football", "Basketball", "Tennis", "Badminton", "Table Tennis", "Volleyball", "Cricket", "Baseball", "Golf", "Rugby", "Hockey", "Skiing", "Snowboarding", "Surfing", "Rowing", "Dance", "Gymnastics", "Skateboarding"];
 const GOAL_CHOICES = ["Lean bulk", "Boxing conditioning", "Body recomposition", "Increase strength while lean", "Run a 10K", "Return from injury", "Build endurance", "Improve mobility", "General fitness"];
 const EXERCISES = [
   ["Barbell Bench Press", "Chest", "intermediate", "4 x 6-8", "120s rest", "chest | triceps | shoulders"],
@@ -19,12 +19,60 @@ const EXERCISES = [
   ["Cable Chest Fly", "Chest", "beginner", "3 x 12-15", "60s rest", "chest"],
   ["Dumbbell Chest Press", "Chest", "beginner", "4 x 8-12", "90s rest", "chest | triceps"],
   ["Weighted Dip", "Chest", "advanced", "3 x 6-10", "120s rest", "chest | triceps"],
+  ["Decline Barbell Press", "Chest", "intermediate", "4 x 8-10", "90s rest", "chest | triceps"],
+  ["Pec Deck Machine", "Chest", "beginner", "3 x 12-15", "60s rest", "chest"],
   ["Barbell Row", "Back", "intermediate", "4 x 8-10", "90s rest", "back | biceps"],
   ["Lat Pulldown", "Back", "beginner", "3 x 10-12", "75s rest", "back | biceps"],
-  ["Goblet Squat", "Quads", "beginner", "4 x 10-12", "90s rest", "quads | glutes | core"],
-  ["Romanian Deadlift", "Hamstrings", "intermediate", "4 x 8-10", "120s rest", "hamstrings | glutes | back"],
+  ["Pull-Up", "Back", "intermediate", "4 x 6-10", "90s rest", "back | biceps"],
+  ["Seated Cable Row", "Back", "beginner", "3 x 10-12", "75s rest", "back | biceps"],
+  ["Single-Arm Dumbbell Row", "Back", "beginner", "3 x 10-12", "60s rest", "back | biceps"],
+  ["Deadlift", "Back", "advanced", "4 x 5-6", "150s rest", "back | hamstrings | glutes"],
+  ["T-Bar Row", "Back", "intermediate", "4 x 8-10", "90s rest", "back | biceps"],
   ["Standing Shoulder Press", "Shoulders", "intermediate", "4 x 8-10", "90s rest", "shoulders | triceps"],
+  ["Lateral Raise", "Shoulders", "beginner", "3 x 12-15", "45s rest", "shoulders"],
+  ["Face Pull", "Shoulders", "beginner", "3 x 15-20", "45s rest", "shoulders | back"],
+  ["Arnold Press", "Shoulders", "intermediate", "3 x 8-10", "75s rest", "shoulders | triceps"],
+  ["Front Raise", "Shoulders", "beginner", "3 x 12-15", "45s rest", "shoulders"],
+  ["Rear Delt Fly", "Shoulders", "beginner", "3 x 12-15", "45s rest", "shoulders | back"],
+  ["Barbell Curl", "Biceps", "beginner", "3 x 8-12", "60s rest", "biceps"],
+  ["Dumbbell Hammer Curl", "Biceps", "beginner", "3 x 10-12", "60s rest", "biceps | forearms"],
+  ["Incline Dumbbell Curl", "Biceps", "intermediate", "3 x 10-12", "60s rest", "biceps"],
+  ["Preacher Curl", "Biceps", "intermediate", "3 x 8-10", "60s rest", "biceps"],
+  ["Cable Curl", "Biceps", "beginner", "3 x 12-15", "45s rest", "biceps"],
+  ["Concentration Curl", "Biceps", "beginner", "3 x 10-12", "45s rest", "biceps"],
+  ["Close-Grip Bench Press", "Triceps", "intermediate", "4 x 8-10", "90s rest", "triceps | chest"],
+  ["Tricep Rope Pushdown", "Triceps", "beginner", "3 x 12-15", "45s rest", "triceps"],
+  ["Overhead Tricep Extension", "Triceps", "beginner", "3 x 10-12", "60s rest", "triceps"],
+  ["Skull Crusher", "Triceps", "intermediate", "3 x 8-10", "75s rest", "triceps"],
+  ["Bench Dip", "Triceps", "beginner", "3 x 12-15", "45s rest", "triceps | chest"],
+  ["Diamond Push-Up", "Triceps", "intermediate", "3 x 10-15", "60s rest", "triceps | chest"],
+  ["Goblet Squat", "Quads", "beginner", "4 x 10-12", "90s rest", "quads | glutes | core"],
+  ["Barbell Back Squat", "Quads", "intermediate", "4 x 6-8", "120s rest", "quads | glutes | core"],
+  ["Leg Press", "Quads", "beginner", "4 x 10-12", "90s rest", "quads | glutes"],
+  ["Walking Lunge", "Quads", "beginner", "3 x 12 each", "60s rest", "quads | glutes"],
+  ["Bulgarian Split Squat", "Quads", "intermediate", "3 x 10 each", "75s rest", "quads | glutes"],
+  ["Leg Extension", "Quads", "beginner", "3 x 12-15", "60s rest", "quads"],
+  ["Front Squat", "Quads", "advanced", "4 x 6-8", "120s rest", "quads | core"],
+  ["Romanian Deadlift", "Hamstrings", "intermediate", "4 x 8-10", "120s rest", "hamstrings | glutes | back"],
+  ["Leg Curl", "Hamstrings", "beginner", "3 x 12-15", "60s rest", "hamstrings"],
+  ["Good Morning", "Hamstrings", "intermediate", "3 x 8-10", "90s rest", "hamstrings | back"],
+  ["Stiff-Leg Deadlift", "Hamstrings", "intermediate", "4 x 8-10", "90s rest", "hamstrings | glutes"],
+  ["Nordic Curl", "Hamstrings", "advanced", "3 x 6-8", "90s rest", "hamstrings"],
+  ["Hip Thrust", "Glutes", "beginner", "4 x 10-12", "90s rest", "glutes | hamstrings"],
+  ["Glute Bridge", "Glutes", "beginner", "3 x 15-20", "45s rest", "glutes"],
+  ["Cable Kickback", "Glutes", "beginner", "3 x 12-15 each", "45s rest", "glutes"],
+  ["Sumo Deadlift", "Glutes", "advanced", "4 x 6-8", "120s rest", "glutes | hamstrings | back"],
+  ["Step-Up", "Glutes", "beginner", "3 x 10 each", "60s rest", "glutes | quads"],
   ["Plank", "Core", "beginner", "3 x 45s", "45s rest", "core"],
+  ["Hanging Leg Raise", "Core", "intermediate", "3 x 12-15", "60s rest", "core"],
+  ["Cable Woodchopper", "Core", "beginner", "3 x 12 each", "45s rest", "core | shoulders"],
+  ["Russian Twist", "Core", "beginner", "3 x 20", "45s rest", "core"],
+  ["Ab Wheel Rollout", "Core", "advanced", "3 x 8-12", "60s rest", "core | shoulders"],
+  ["Bicycle Crunch", "Core", "beginner", "3 x 20", "45s rest", "core"],
+  ["Standing Calf Raise", "Calves", "beginner", "4 x 12-15", "45s rest", "calves"],
+  ["Seated Calf Raise", "Calves", "beginner", "3 x 15-20", "45s rest", "calves"],
+  ["Single-Leg Calf Raise", "Calves", "intermediate", "3 x 12 each", "45s rest", "calves"],
+  ["Jump Rope", "Calves", "beginner", "3 x 60s", "45s rest", "calves | cardio"],
 ];
 const ACTIVITIES = {
   Walking: [["Brisk walking", 4.3]],
@@ -601,8 +649,23 @@ function openExerciseInfo(name) {
   el("exercise-close").addEventListener("click", closeModal);
 }
 
+let lastScanResult = null;
+
 function demoScanResult() {
   return '<strong>Demo estimate (AI scanner not connected):</strong><span>Chicken 180g</span><span>Rice 220g</span><span>Vegetables 120g</span><span>Approx. 620 kcal</span><p class="scan-demo-note">This is a fixed placeholder, not a real analysis of your photo. Set up the Gemini-powered scanner (see README) for a real per-photo estimate.</p>';
+}
+
+function renderScanItems(data) {
+  const rows = data.items.map((item) =>
+    '<li><span class="scan-item-name">' + safe(item.name) + (item.grams ? " <small>" + Math.round(item.grams) + "g</small>" : "") + '</span>' +
+    '<span class="scan-item-macros">' + Math.round(item.calories) + " kcal &middot; P " + Math.round(item.protein) + "g &middot; C " + Math.round(item.carbs) + "g &middot; F " + Math.round(item.fat) + "g</span></li>"
+  ).join("");
+  return (
+    "<strong>AI estimate for your photo:</strong>" +
+    '<ul class="scan-items">' + rows + "</ul>" +
+    '<p class="scan-totals"><strong>Total:</strong> ' + Math.round(data.calories) + " kcal &middot; Protein " + Math.round(data.protein) + "g &middot; Carbs " + Math.round(data.carbs) + "g &middot; Fat " + Math.round(data.fat) + "g</p>" +
+    '<button type="button" class="primary-button" id="log-scanned-food">Log this scan</button>'
+  );
 }
 
 function fileToBase64(file) {
@@ -618,7 +681,10 @@ function fileToBase64(file) {
 }
 
 async function analyzeFoodPhoto(file) {
-  if (!file) return demoScanResult();
+  if (!file) {
+    lastScanResult = null;
+    return demoScanResult();
+  }
   try {
     const base64 = await fileToBase64(file);
     const response = await fetch("/api/scan-food", {
@@ -629,11 +695,16 @@ async function analyzeFoodPhoto(file) {
     if (!response.ok) throw new Error("bad status " + response.status);
     const data = await response.json();
     if (!data || !Array.isArray(data.items)) throw new Error("bad payload");
-    const itemsHtml = data.items.map((item) => "<span>" + safe(item.name) + (item.grams ? " " + Math.round(item.grams) + "g" : "") + "</span>").join("");
-    return "<strong>AI estimate for your photo:</strong>" + itemsHtml + "<span>Approx. " + Math.round(data.calories || 0) + " kcal</span>";
+    if (!data.items.length) {
+      lastScanResult = null;
+      return '<strong>No food items detected.</strong><p class="scan-demo-note">Try a clearer, well-lit photo with the food clearly visible.</p>';
+    }
+    lastScanResult = data;
+    return renderScanItems(data);
   } catch (err) {
     // Covers: no /api route, the Gemini key not configured yet, or an
     // upstream failure - never break the scanner, just show the demo result.
+    lastScanResult = null;
     return demoScanResult();
   }
 }
@@ -752,6 +823,28 @@ function events() {
     el("scan-result").hidden = false;
     el("scan-result").innerHTML = "<strong>Analyzing your photo...</strong>";
     el("scan-result").innerHTML = await analyzeFoodPhoto(file);
+    if (el("log-scanned-food")) {
+      el("log-scanned-food").addEventListener("click", () => {
+        if (!lastScanResult) return;
+        const names = lastScanResult.items.map((item) => item.name);
+        const label = names.slice(0, 3).join(", ") + (names.length > 3 ? " +" + (names.length - 3) + " more" : "");
+        state.meals.push({
+          id: String(Date.now()),
+          date: today(),
+          name: "Scanned: " + label,
+          calories: lastScanResult.calories,
+          protein: lastScanResult.protein,
+          carbs: lastScanResult.carbs,
+          fat: lastScanResult.fat,
+        });
+        saveState();
+        renderFood();
+        renderDashboard();
+        el("log-scanned-food").textContent = "Logged \u2713";
+        el("log-scanned-food").disabled = true;
+        toast("Logged to your nutrition log.");
+      });
+    }
   });
   el("open-meal-modal").addEventListener("click", openMealModal);
   el("nutrition-ai-form").addEventListener("submit", (event) => {
