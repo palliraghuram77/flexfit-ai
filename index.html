@@ -5,381 +5,236 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="FlexFit AI is a responsive AI fitness landing page with workout planning, macro calculation, progress tracking, and contact flows."
+      content="FlexFit AI is a responsive fitness dashboard for workouts, food, cardio, progress, and coaching."
     />
-    <title>FlexFit AI | Smart Fitness Companion</title>
+    <title>FlexFit AI</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header class="site-header">
-      <a class="brand" href="#home" aria-label="FlexFit AI home">
-        <span class="brand-mark">F</span>
-        <span>FlexFit AI</span>
-      </a>
-
-      <button class="menu-toggle" type="button" aria-label="Open navigation" aria-expanded="false">
-        <span></span>
-        <span></span>
-        <span></span>
-      </button>
-
-      <nav class="site-nav" aria-label="Primary navigation">
-        <a href="#features">Features</a>
-        <a href="#planner">Planner</a>
-        <a href="#calculator">Calculator</a>
-        <a href="#progress">Progress</a>
-        <a href="#contact">Contact</a>
-      </nav>
-
-      <a class="header-action" href="#planner">Start Free</a>
-    </header>
-
-    <main>
-      <section class="hero" id="home">
-        <div class="hero-copy">
-          <p class="eyebrow">AI-powered fitness platform</p>
-          <h1>Your smarter fitness companion</h1>
-          <p class="hero-text">
-            Build adaptive workouts, estimate nutrition goals, and track weekly habits from one
-            responsive web app made for real progress.
-          </p>
-          <div class="hero-actions">
-            <a class="button primary" href="#planner">Generate Plan</a>
-            <a class="button secondary" href="#features">Explore Features</a>
-          </div>
-          <div class="hero-stats" aria-label="Platform highlights">
-            <div>
-              <strong>4</strong>
-              <span>training goals</span>
-            </div>
-            <div>
-              <strong>8+</strong>
-              <span>plan variations</span>
-            </div>
-            <div>
-              <strong>100%</strong>
-              <span>responsive</span>
-            </div>
-          </div>
+    <div class="auth-screen" id="auth-screen">
+      <div class="auth-card">
+        <div class="auth-brand"><span class="brand-mark" aria-hidden="true">FF</span><span>FlexFit AI</span></div>
+        <div class="auth-tabs" role="tablist" aria-label="Sign in or create account">
+          <button class="auth-tab active" type="button" role="tab" aria-selected="true" data-auth-tab="signin">Sign In</button>
+          <button class="auth-tab" type="button" role="tab" aria-selected="false" data-auth-tab="signup">Create Account</button>
         </div>
-
-        <div class="hero-media" aria-label="Gym training preview">
-          <img
-            src="https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=1200&q=85"
-            alt="Athlete strength training in a gym"
-          />
-          <div class="floating-card calories-card">
-            <span class="card-icon">+</span>
-            <div>
-              <span>Today</span>
-              <strong>1,247 kcal</strong>
-            </div>
-          </div>
-          <div class="floating-card streak-card">
-            <span class="card-icon">7</span>
-            <div>
-              <span>Habit streak</span>
-              <strong>7 days</strong>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="section feature-band" id="features">
-        <div class="section-heading">
-          <p class="eyebrow">Features</p>
-          <h2>Everything needed to turn a fitness idea into a real app</h2>
-          <p>
-            This version keeps the clean Base44 landing page feel, then adds interactive features
-            that make the project stronger for GitHub and resume review.
-          </p>
-        </div>
-
-        <div class="feature-grid">
-          <article class="feature-card">
-            <span class="feature-icon">AI</span>
-            <h3>Workout Generator</h3>
-            <p>Create workout splits based on goal, experience, equipment, and available days.</p>
-          </article>
-          <article class="feature-card">
-            <span class="feature-icon">kcal</span>
-            <h3>Nutrition Calculator</h3>
-            <p>Estimate daily calories and macros with practical bulking, cutting, and maintenance targets.</p>
-          </article>
-          <article class="feature-card">
-            <span class="feature-icon">%</span>
-            <h3>Progress Tracker</h3>
-            <p>Log workouts, water, and sleep locally with a simple visual weekly dashboard.</p>
-          </article>
-          <article class="feature-card">
-            <span class="feature-icon">UX</span>
-            <h3>Responsive Experience</h3>
-            <p>Mobile navigation, accessible labels, smooth anchors, and polished layout across screen sizes.</p>
-          </article>
-        </div>
-      </section>
-
-      <section class="section split-section" id="planner">
-        <div class="section-copy">
-          <p class="eyebrow">AI workout planner</p>
-          <h2>Generate a training plan in seconds</h2>
-          <p>
-            Pick the same kind of profile information a real fitness assistant would need. The
-            planner then builds a clean weekly structure you can show as a working app feature.
-          </p>
-        </div>
-
-        <div class="tool-grid">
-          <form class="tool-panel" id="workout-form">
-            <label>
-              Fitness goal
-              <select name="goal">
-                <option value="build muscle">Build muscle</option>
-                <option value="lose fat">Lose fat</option>
-                <option value="strength">Increase strength</option>
-                <option value="mobility">Improve mobility</option>
-              </select>
-            </label>
-            <label>
-              Experience level
-              <select name="level">
-                <option value="beginner">Beginner</option>
-                <option value="intermediate">Intermediate</option>
-                <option value="advanced">Advanced</option>
-              </select>
-            </label>
-            <label>
-              Equipment
-              <select name="equipment">
-                <option value="gym">Full gym</option>
-                <option value="dumbbells">Dumbbells</option>
-                <option value="bodyweight">Bodyweight</option>
-              </select>
-            </label>
-            <label>
-              Training days
-              <input type="number" name="days" min="2" max="6" value="4" />
-            </label>
-            <button class="button primary full-width" type="submit">Create Workout</button>
-          </form>
-
-          <article class="result-panel" id="workout-result" aria-live="polite">
-            <p class="panel-kicker">Generated plan</p>
-            <h3>4-day muscle plan</h3>
-            <ul>
-              <li>Day 1: Upper body push with progressive overload</li>
-              <li>Day 2: Lower body strength and core stability</li>
-              <li>Day 3: Pull training with rows, curls, and rear delts</li>
-              <li>Day 4: Full-body conditioning and mobility finish</li>
-            </ul>
-          </article>
-        </div>
-      </section>
-
-      <section class="section calculator-band" id="calculator">
-        <div class="section-heading">
-          <p class="eyebrow">Nutrition</p>
-          <h2>Calculate calories and macros</h2>
-          <p>
-            A lightweight calculator gives the project useful application logic without needing a
-            backend database.
-          </p>
-        </div>
-
-        <div class="calculator-layout">
-          <form class="tool-panel" id="macro-form">
-            <div class="field-row">
-              <label>
-                Age
-                <input type="number" name="age" min="13" max="90" value="22" />
-              </label>
-              <label>
-                Weight (kg)
-                <input type="number" name="weight" min="30" max="220" value="70" />
-              </label>
-            </div>
-            <div class="field-row">
-              <label>
-                Height (cm)
-                <input type="number" name="height" min="120" max="230" value="175" />
-              </label>
-              <label>
-                Activity
-                <select name="activity">
-                  <option value="1.2">Light</option>
-                  <option value="1.45" selected>Moderate</option>
-                  <option value="1.7">Active</option>
-                </select>
-              </label>
-            </div>
-            <label>
-              Goal
-              <select name="macroGoal">
-                <option value="cut">Fat loss</option>
-                <option value="maintain" selected>Maintain</option>
-                <option value="bulk">Lean bulk</option>
-              </select>
-            </label>
-            <button class="button primary full-width" type="submit">Calculate Macros</button>
-          </form>
-
-          <div class="macro-results" id="macro-result" aria-live="polite">
-            <div class="macro-ring">
-              <strong>2460</strong>
-              <span>kcal/day</span>
-            </div>
-            <div class="macro-list">
-              <div>
-                <span>Protein</span>
-                <strong>140g</strong>
-              </div>
-              <div>
-                <span>Carbs</span>
-                <strong>308g</strong>
-              </div>
-              <div>
-                <span>Fat</span>
-                <strong>68g</strong>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="section split-section progress-section" id="progress">
-        <div class="section-copy">
-          <p class="eyebrow">Progress tracker</p>
-          <h2>Log the habits that create visible change</h2>
-          <p>
-            Save a simple daily check-in in the browser. It uses local storage, so users can refresh
-            and keep their recent progress on the same device.
-          </p>
-        </div>
-
-        <div class="progress-layout">
-          <form class="tool-panel" id="progress-form">
-            <label>
-              Workouts this week
-              <input type="number" name="workouts" min="0" max="14" value="3" />
-            </label>
-            <label>
-              Water today (liters)
-              <input type="number" name="water" min="0" max="8" step="0.1" value="2.5" />
-            </label>
-            <label>
-              Sleep last night (hours)
-              <input type="number" name="sleep" min="0" max="14" step="0.5" value="7" />
-            </label>
-            <button class="button primary full-width" type="submit">Save Check-In</button>
-          </form>
-
-          <article class="result-panel">
-            <div class="progress-summary" id="progress-summary">
-              <div>
-                <span>Workouts</span>
-                <strong>3</strong>
-              </div>
-              <div>
-                <span>Water</span>
-                <strong>2.5L</strong>
-              </div>
-              <div>
-                <span>Sleep</span>
-                <strong>7h</strong>
-              </div>
-            </div>
-            <div class="bar-chart" id="bar-chart" aria-label="Weekly progress chart"></div>
-          </article>
-        </div>
-      </section>
-
-      <section class="section social-proof" aria-label="Testimonials">
-        <div class="section-heading">
-          <p class="eyebrow">Testimonials</p>
-          <h2>Built for people who want simple guidance</h2>
-        </div>
-
-        <div class="testimonial-grid">
-          <article class="testimonial-card">
-            <p>
-              "The workout planner makes it easy to decide what to do next without opening five
-              different apps."
-            </p>
-            <strong>Arjun Mehta</strong>
-            <span>College athlete</span>
-          </article>
-          <article class="testimonial-card">
-            <p>
-              "The macro calculator and habit tracker turn the landing page into something that
-              feels like a real product."
-            </p>
-            <strong>Neha Sharma</strong>
-            <span>Fitness beginner</span>
-          </article>
-          <article class="testimonial-card">
-            <p>
-              "Clean, fast, and easy to explain in a project review. That matters when showing a
-              portfolio site."
-            </p>
-            <strong>Rohan Iyer</strong>
-            <span>Frontend mentor</span>
-          </article>
-        </div>
-      </section>
-
-      <section class="section contact-section" id="contact">
-        <div class="contact-copy">
-          <p class="eyebrow">Contact</p>
-          <h2>Ready to shape the next version?</h2>
-          <p>
-            Use this form as a front-end demo. A production app would connect it to an email API,
-            serverless function, or backend route.
-          </p>
-          <a href="mailto:support@flexfitai.com">support@flexfitai.com</a>
-        </div>
-
-        <form class="contact-form" id="contact-form">
-          <label>
-            Name
-            <input type="text" name="name" placeholder="John Doe" required />
-          </label>
-          <label>
-            Email
-            <input type="email" name="email" placeholder="john@example.com" required />
-          </label>
-          <label>
-            Message
-            <textarea name="message" rows="5" placeholder="Tell us what you need..." required></textarea>
-          </label>
-          <button class="button primary full-width" type="submit">Send Message</button>
-          <p class="form-status" id="form-status" aria-live="polite"></p>
+        <form class="auth-form" id="auth-form">
+          <label>Name<input type="text" id="auth-name" name="name" placeholder="Your name" required /></label>
+          <label>Email<input type="email" id="auth-email" name="email" placeholder="you@example.com" required /></label>
+          <button class="primary-button" type="submit" id="auth-submit">Sign In</button>
         </form>
-      </section>
-    </main>
+        <div class="auth-divider"><span>or</span></div>
+        <div id="google-signin-button" class="google-signin-slot"></div>
+        <div class="auth-divider"><span>or</span></div>
+        <button class="outline-button auth-guest" type="button" id="auth-guest">Continue as Guest</button>
+        <p class="auth-note">Local demo sign-in - your details stay on this device, no account is created on a server.</p>
+      </div>
+    </div>
 
-    <footer class="site-footer">
-      <div>
-        <a class="brand" href="#home" aria-label="FlexFit AI home">
-          <span class="brand-mark">F</span>
+    <div class="app-shell" id="app-shell" hidden>
+      <aside class="sidebar" id="sidebar" aria-label="Application navigation">
+        <a class="brand" href="#dashboard" data-nav="dashboard" aria-label="FlexFit AI dashboard">
+          <span class="brand-mark" aria-hidden="true">FF</span>
           <span>FlexFit AI</span>
         </a>
-        <p>AI-powered fitness planning, nutrition estimation, and habit tracking.</p>
-      </div>
-      <div class="footer-links">
-        <a href="#features">Features</a>
-        <a href="#planner">Planner</a>
-        <a href="#calculator">Calculator</a>
-        <a href="#contact">Contact</a>
-      </div>
-      <p class="copyright">© 2026 FlexFit AI. Built as a portfolio-ready project.</p>
-    </footer>
 
+        <nav class="side-nav" aria-label="Primary navigation">
+          <button class="nav-link active" type="button" data-page="dashboard">Dashboard</button>
+          <button class="nav-link" type="button" data-page="workout">Workout</button>
+          <button class="nav-link" type="button" data-page="food">Food</button>
+          <button class="nav-link" type="button" data-page="cardio">Cardio</button>
+          <button class="nav-link" type="button" data-page="jiya">Jiya AI</button>
+          <button class="nav-link" type="button" data-page="progress">Progress</button>
+          <button class="nav-link" type="button" data-page="profile">Profile</button>
+        </nav>
+
+        <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Toggle color theme">Theme: System</button>
+        <button class="sign-out" type="button" id="sign-out">Sign Out</button>
+      </aside>
+
+      <div class="mobile-header">
+        <a class="brand" href="#dashboard" data-nav="dashboard" aria-label="FlexFit AI dashboard">
+          <span class="brand-mark" aria-hidden="true">FF</span>
+          <span>FlexFit AI</span>
+        </a>
+        <button class="menu-button" type="button" id="menu-button" aria-label="Open menu" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+
+      <main class="main-content" id="main-content">
+        <section class="page active" id="dashboard-page" data-page-view="dashboard">
+          <div class="page-heading dashboard-heading">
+            <h1>Dashboard</h1>
+            <p id="dashboard-sports">Bodybuilding &middot; Running &middot; Martial Arts</p>
+            <p id="dashboard-goals">Lean bulk &middot; Boxing conditioning &middot; Body recomposition</p>
+          </div>
+
+          <div class="stat-grid" aria-label="Fitness overview">
+            <article class="stat-card">
+              <div class="stat-label"><span>Today's Calories</span></div>
+              <strong id="today-calories">0</strong><p>of <span id="calorie-target">2850</span> kcal target</p>
+            </article>
+            <article class="stat-card">
+              <div class="stat-label"><span>Weekly Workouts</span></div>
+              <strong id="weekly-workouts">0</strong><p>last 7 days</p>
+            </article>
+            <article class="stat-card">
+              <div class="stat-label"><span>Current Weight</span></div>
+              <strong><span id="current-weight">73</span> kg</strong><p>target <span id="target-weight">78</span> kg</p>
+            </article>
+            <article class="stat-card">
+              <div class="stat-label"><span>Fitness Goal</span></div>
+              <strong id="fitness-level">beginner</strong><p id="fitness-goal-copy">Lean bulk, Boxing conditioning, Body recomposition</p>
+            </article>
+          </div>
+
+          <div class="dashboard-grid">
+            <article class="panel training-panel">
+              <div class="panel-title"><h2>Today's Training</h2></div>
+              <p id="today-training-copy">No session logged today. Open your weekly split and get moving.</p>
+              <button class="primary-button" type="button" data-page="workout">Start today's workout <span aria-hidden="true">&rarr;</span></button>
+            </article>
+            <article class="panel macro-panel">
+              <div class="panel-title"><h2>Today's Macros</h2></div>
+              <p class="macro-empty" id="macro-empty">Log a meal to see your macro split.</p>
+              <div class="macro-row">
+                <div><span>Protein</span><strong id="macro-protein">0/180g</strong></div>
+                <div><span>Carbs</span><strong id="macro-carbs">0/350g</strong></div>
+                <div><span>Fat</span><strong id="macro-fat">0/80g</strong></div>
+              </div>
+            </article>
+            <article class="panel chart-panel">
+              <div class="panel-title"><div><h2>Calories &mdash; last 7 days</h2><p>Daily target <span id="chart-target">2850</span> kcal</p></div></div>
+              <div class="line-chart" id="calorie-chart" aria-label="Calories for the last seven days"></div>
+            </article>
+            <article class="panel recommendations-panel">
+              <div class="panel-title"><h2>Jiya's Recommendations</h2></div>
+              <div id="recommendation-content"><p>Get 3-4 personalised tips based on your profile and recent logs.</p><button class="outline-button" type="button" id="get-recommendations">Get recommendations</button></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="page" id="workout-page" data-page-view="workout" hidden>
+          <div class="page-heading"><h1>Workout</h1><p>Your weekly split and a curated exercise library.</p></div>
+          <div class="tabs" role="tablist" aria-label="Workout views">
+            <button class="tab active" type="button" role="tab" aria-selected="true" data-tab-group="workout" data-tab="split">Weekly Split</button>
+            <button class="tab" type="button" role="tab" aria-selected="false" data-tab-group="workout" data-tab="library">Exercise Library</button>
+          </div>
+          <div class="tab-panel active" data-panel-group="workout" data-panel="split">
+            <div class="section-toolbar"><p>Tailored to: <strong id="split-goal">general fitness</strong></p><button class="outline-button" type="button" id="regenerate-workout">AI Regenerate</button></div>
+            <div class="week-grid" id="week-grid"></div>
+          </div>
+          <div class="tab-panel" data-panel-group="workout" data-panel="library" hidden>
+            <div class="library-tools">
+              <label class="search-field"><span class="sr-only">Search exercises</span><input type="search" id="exercise-search" placeholder="Search exercises..." /></label>
+              <div class="filter-row" id="exercise-filters" aria-label="Exercise muscle group filters"></div>
+            </div>
+            <div class="exercise-grid" id="exercise-grid"></div>
+          </div>
+        </section>
+
+        <section class="page" id="food-page" data-page-view="food" hidden>
+          <div class="page-heading"><h1>Food</h1><p>Plan, scan and log everything you eat.</p></div>
+          <div class="tabs" role="tablist" aria-label="Food views">
+            <button class="tab active" type="button" role="tab" aria-selected="true" data-tab-group="food" data-tab="diet">Diet Plan</button>
+            <button class="tab" type="button" role="tab" aria-selected="false" data-tab-group="food" data-tab="scanner">Food Scanner</button>
+            <button class="tab" type="button" role="tab" aria-selected="false" data-tab-group="food" data-tab="log">Nutrition Log</button>
+            <button class="tab" type="button" role="tab" aria-selected="false" data-tab-group="food" data-tab="ai">Nutrition AI</button>
+          </div>
+          <div class="tab-panel active" data-panel-group="food" data-panel="diet">
+            <div class="diet-callout"><div><p>Target: <strong><span id="diet-target">2850</span> kcal</strong> per day</p><span>Generate a full-day meal plan with four swappable alternatives for every meal.</span></div><button class="primary-button" type="button" id="generate-diet">Generate Plan</button></div>
+            <div class="meal-plan" id="meal-plan"></div>
+          </div>
+          <div class="tab-panel" data-panel-group="food" data-panel="scanner" hidden>
+            <div class="scanner-panel">
+              <input class="sr-only" type="file" accept="image/*" id="food-upload" />
+              <div class="scanner-actions"><label class="outline-button" for="food-upload">Upload photo</label><button class="outline-button" type="button" id="open-camera">Open camera</button><button class="primary-button" type="button" id="scan-food" disabled>Scan Food with AI</button></div>
+              <div class="scan-preview" id="scan-preview">Snap or upload a photo of your plate - every ingredient is measured separately.</div>
+              <div class="scan-result" id="scan-result" hidden></div>
+            </div>
+          </div>
+          <div class="tab-panel" data-panel-group="food" data-panel="log" hidden>
+            <div class="nutrition-log-heading"><div><p>Today</p><h2><span id="food-total">0</span> <small>of <span id="food-target">2850</span> kcal</small></h2></div><button class="primary-button" type="button" id="open-meal-modal">Log Meal</button></div>
+            <div class="food-progress" id="food-progress"></div><div class="meal-log" id="meal-log"></div>
+          </div>
+          <div class="tab-panel" data-panel-group="food" data-panel="ai" hidden>
+            <form class="nutrition-ai-form" id="nutrition-ai-form"><label class="sr-only" for="ingredient-input">Add an ingredient you have</label><input id="ingredient-input" type="text" placeholder="Add an ingredient you have..." /><button class="icon-button" type="submit" aria-label="Add ingredient">+</button></form>
+            <div class="ingredient-list" id="ingredient-list"></div><button class="primary-button" type="button" id="generate-ai-meals">Generate Meals</button><div class="ai-meal-results" id="ai-meal-results"></div>
+          </div>
+        </section>
+
+        <section class="page" id="cardio-page" data-page-view="cardio" hidden>
+          <div class="page-heading"><h1>Cardio Tracker</h1><p>Pick an activity, hit start and watch the calories climb in real time.</p></div>
+          <div class="cardio-layout">
+            <section class="activity-picker" aria-labelledby="activity-title">
+              <h2 id="activity-title">Choose your activity</h2>
+              <label class="search-field"><span class="sr-only">Search activities</span><input type="search" id="activity-search" placeholder="Search activities..." /></label>
+              <div class="filter-row" id="activity-filters"></div><div class="activity-list" id="activity-list"></div>
+            </section>
+            <section class="timer-panel">
+              <p id="selected-activity">Jogging (8 km/h)</p><strong class="timer" id="cardio-timer">00:00:00</strong><strong class="burned" id="cardio-burned">0</strong><span>kcal burned</span><strong class="minutes" id="cardio-minutes">0</strong><span>minutes</span><button class="primary-button" type="button" id="cardio-toggle">Start</button><p class="activity-meta" id="activity-meta">MET 8.3 &middot; body weight 73 kg</p>
+            </section>
+          </div>
+          <section class="history-panel"><div class="panel-title"><h2>Session history</h2></div><div class="history-totals"><div><strong id="cardio-total-kcal">0</strong><span>total kcal</span></div><div><strong id="cardio-total-minutes">0</strong><span>total minutes</span></div></div><div id="cardio-history"></div></section>
+        </section>
+
+        <section class="page" id="jiya-page" data-page-view="jiya" hidden>
+          <div class="page-heading"><h1>Jiya - AI Fitness Trainer</h1><p>Coaching that knows your profile, goals and targets.</p></div>
+          <section class="coach-panel">
+            <div class="coach-intro"><p>Hi, I'm <strong>Jiya</strong> - your AI fitness trainer. Ask me for a workout, a meal plan, or anything about your training and I'll tailor it to your profile.</p></div>
+            <div class="prompt-grid"><button type="button" data-prompt="Generate a push day workout">Generate a push day workout</button><button type="button" data-prompt="Create a meal plan for cutting">Create a meal plan for cutting</button><button type="button" data-prompt="How much protein do I need?">How much protein do I need?</button><button type="button" data-prompt="Give me a HIIT workout for 30 minutes">Give me a HIIT workout for 30 minutes</button></div>
+            <div class="chat-log" id="chat-log" aria-live="polite"></div>
+            <form class="chat-form" id="chat-form"><label class="sr-only" for="coach-input">Ask Jiya anything</label><input id="coach-input" type="text" placeholder="Ask Jiya anything..." /><button class="primary-button" type="submit">Send</button></form>
+          </section>
+        </section>
+
+        <section class="page" id="progress-page" data-page-view="progress" hidden>
+          <div class="page-heading with-action"><div><h1>Progress</h1><p>Weight, output and consistency over time.</p></div><button class="primary-button" type="button" id="open-weight-modal">Log Weight</button></div>
+          <div class="progress-layout">
+            <section class="panel progress-chart-panel"><div class="panel-title"><h2>Weight history</h2></div><div class="line-chart large-chart" id="weight-chart"></div><p class="empty-chart-message" id="weight-chart-message">Log your weight to start the chart.</p></section>
+            <section class="panel progress-chart-panel"><div class="panel-title"><h2>Calories burned - 14 days</h2></div><div class="line-chart large-chart" id="burn-chart"></div></section>
+            <section class="panel progress-chart-panel"><div class="panel-title"><h2>Workout consistency - 8 weeks</h2></div><div class="consistency-chart" id="consistency-chart"></div></section>
+          </div>
+          <section class="summary-panel"><div class="panel-title"><h2>Summary</h2></div><div class="summary-grid"><div><strong id="summary-workouts">0</strong><span>Total workouts</span></div><div><strong id="summary-completed">0</strong><span>Completed</span></div><div><strong id="summary-burned">0</strong><span>Calories burned</span></div><div><strong id="summary-weight">0</strong><span>Weight entries</span></div></div></section>
+        </section>
+
+        <section class="page" id="profile-page" data-page-view="profile" hidden>
+          <div class="page-heading"><h1 id="profile-heading-title">Your Profile</h1><p id="profile-heading-copy">Pick as many sports and goals as you like - Jiya calculates your daily targets from all of them.</p></div>
+          <section class="target-panel" id="profile-target-panel"><p>Current AI targets</p><div class="target-grid"><div><strong id="profile-calories">2850 kcal</strong><span>Calories</span></div><div><strong id="profile-protein">180 g</strong><span>Protein</span></div><div><strong id="profile-carbs">350 g</strong><span>Carbs</span></div><div><strong id="profile-fat">80 g</strong><span>Fat</span></div></div></section>
+          <div class="profile-steps" role="tablist" aria-label="Profile sections">
+            <button class="profile-step active" type="button" role="tab" aria-selected="true" data-tab-group="profile" data-tab="sports"><b>1</b>Sports</button>
+            <button class="profile-step" type="button" role="tab" aria-selected="false" data-tab-group="profile" data-tab="goals"><b>2</b>Goals</button>
+            <button class="profile-step" type="button" role="tab" aria-selected="false" data-tab-group="profile" data-tab="details"><b>3</b>Details</button>
+          </div>
+          <div class="tab-panel active" data-panel-group="profile" data-panel="sports"><h2>Sports</h2><p class="selected-summary" id="selected-sports"></p><div class="choice-grid" id="sport-choices"></div><button class="primary-button next-profile" type="button" data-next-profile="goals">Continue</button></div>
+          <div class="tab-panel" data-panel-group="profile" data-panel="goals" hidden><h2>Goals</h2><p class="selected-summary" id="selected-goals"></p><div class="choice-grid" id="goal-choices"></div><div class="profile-actions"><button class="outline-button" type="button" data-next-profile="sports">Back</button><button class="primary-button" type="button" data-next-profile="details">Continue</button></div></div>
+          <div class="tab-panel" data-panel-group="profile" data-panel="details" hidden>
+            <form class="profile-form" id="profile-form">
+              <div class="details-grid"><label>Age (years)<input type="number" name="age" min="13" max="100" /></label><label>Height (cm)<input type="number" name="height" min="120" max="230" /></label><label>Weight (kg)<input type="number" name="weight" min="30" max="250" step="0.1" /></label><label>Target weight (kg)<input type="number" name="targetWeight" min="30" max="250" step="0.1" /></label></div>
+              <fieldset class="level-fieldset"><legend>Fitness level</legend><div class="level-grid"><label><input type="radio" name="level" value="beginner" /><span><b>beginner</b>New to training or returning after a long break</span></label><label><input type="radio" name="level" value="intermediate" /><span><b>intermediate</b>Training consistently for 6+ months</span></label><label><input type="radio" name="level" value="advanced" /><span><b>advanced</b>Years of structured training and solid technique</span></label><label><input type="radio" name="level" value="elite" /><span><b>elite</b>Competing at a high level with periodised training</span></label></div></fieldset>
+              <div class="profile-actions"><button class="outline-button" type="button" data-next-profile="goals">Back</button><button class="primary-button" type="submit">Save &amp; Generate AI Targets</button></div>
+            </form>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="modal-backdrop" id="modal-backdrop" hidden>
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="modal-heading"><h2 id="modal-title">Log meal</h2><button class="close-button" type="button" id="close-modal" aria-label="Close dialog">&times;</button></div>
+        <form id="modal-form"></form>
+      </section>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="script.js"></script>
   </body>
 </html>
