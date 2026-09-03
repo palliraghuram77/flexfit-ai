@@ -787,7 +787,7 @@ async function analyzeFoodPhoto(file) {
 
 // Fill this in with your own Google OAuth Client ID to enable "Sign in with
 // Google" (see README - it's a public value, safe to commit, not a secret).
-const GOOGLE_CLIENT_ID = "";
+const GOOGLE_CLIENT_ID = "903860660435-kv759pqtnen465hkvmc46vcvg9a71fuc.apps.googleusercontent.com";
 
 function decodeGoogleCredential(token) {
   try {
