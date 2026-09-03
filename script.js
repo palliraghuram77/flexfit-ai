@@ -12,7 +12,68 @@ const DEFAULT_PROFILE = {
 };
 const DEFAULT_TARGETS = { calories: 2850, protein: 180, carbs: 350, fat: 80 };
 const SPORT_CHOICES = ["Bodybuilding", "Powerlifting", "CrossFit", "Running", "Trail Running", "Sprinting", "Martial Arts", "Boxing", "Kickboxing", "Brazilian Jiu-Jitsu", "Wrestling", "Cycling", "Mountain Biking", "Swimming", "Triathlon", "Yoga", "Pilates", "Calisthenics", "Rock Climbing", "Hiking", "Football", "Basketball", "Tennis", "Badminton", "Table Tennis", "Volleyball", "Cricket", "Baseball", "Golf", "Rugby", "Hockey", "Skiing", "Snowboarding", "Surfing", "Rowing", "Dance", "Gymnastics", "Skateboarding"];
+// Fallback list shown when no sport is selected yet.
 const GOAL_CHOICES = ["Lean bulk", "Boxing conditioning", "Body recomposition", "Increase strength while lean", "Run a 10K", "Return from injury", "Build endurance", "Improve mobility", "General fitness"];
+// Goals shown on every profile regardless of sport selection.
+const UNIVERSAL_GOALS = ["General fitness", "Return from injury"];
+// Per-sport relevant goals - selecting a sport swaps the goal list to match it.
+const SPORT_GOALS = {
+  "Bodybuilding": ["Lean bulk", "Body recomposition", "Increase strength while lean", "Build muscle mass", "Improve muscle symmetry", "Contest prep"],
+  "Powerlifting": ["Increase strength while lean", "Improve 1-rep max", "Build muscle mass", "Body recomposition"],
+  "CrossFit": ["Build endurance", "Increase strength while lean", "Body recomposition", "Improve mobility"],
+  "Running": ["Run a 10K", "Run a half marathon", "Run a marathon", "Improve pace", "Build endurance"],
+  "Trail Running": ["Build endurance", "Improve pace", "Run a 10K", "Improve mobility"],
+  "Sprinting": ["Improve speed", "Build explosive power", "Increase strength while lean"],
+  "Martial Arts": ["Boxing conditioning", "Improve mobility", "Build endurance", "Increase strength while lean"],
+  "Boxing": ["Boxing conditioning", "Improve speed", "Build endurance", "Increase strength while lean"],
+  "Kickboxing": ["Boxing conditioning", "Build endurance", "Improve mobility", "Increase strength while lean"],
+  "Brazilian Jiu-Jitsu": ["Build endurance", "Improve mobility", "Increase strength while lean"],
+  "Wrestling": ["Increase strength while lean", "Build endurance", "Improve mobility"],
+  "Cycling": ["Build endurance", "Improve pace", "Body recomposition"],
+  "Mountain Biking": ["Build endurance", "Improve mobility"],
+  "Swimming": ["Build endurance", "Improve pace", "Body recomposition"],
+  "Triathlon": ["Build endurance", "Improve pace", "Run a 10K"],
+  "Yoga": ["Improve mobility", "Improve flexibility", "Reduce stress"],
+  "Pilates": ["Improve mobility", "Improve core strength", "Body recomposition"],
+  "Calisthenics": ["Build muscle mass", "Increase strength while lean", "Improve mobility", "Body recomposition"],
+  "Rock Climbing": ["Increase strength while lean", "Improve mobility", "Build endurance"],
+  "Hiking": ["Build endurance", "Improve mobility"],
+  "Football": ["Build endurance", "Increase strength while lean", "Improve speed"],
+  "Basketball": ["Build endurance", "Improve speed", "Increase strength while lean"],
+  "Tennis": ["Improve speed", "Build endurance", "Increase strength while lean"],
+  "Badminton": ["Improve speed", "Build endurance"],
+  "Table Tennis": ["Improve speed"],
+  "Volleyball": ["Build explosive power", "Improve speed", "Build endurance"],
+  "Cricket": ["Build endurance", "Increase strength while lean"],
+  "Baseball": ["Increase strength while lean", "Improve speed"],
+  "Golf": ["Improve mobility", "Increase strength while lean"],
+  "Rugby": ["Increase strength while lean", "Build endurance", "Build explosive power"],
+  "Hockey": ["Build endurance", "Increase strength while lean", "Improve speed"],
+  "Skiing": ["Increase strength while lean", "Improve mobility", "Build endurance"],
+  "Snowboarding": ["Improve mobility", "Build explosive power"],
+  "Surfing": ["Improve mobility", "Build endurance"],
+  "Rowing": ["Build endurance", "Increase strength while lean"],
+  "Dance": ["Improve mobility", "Build endurance"],
+  "Gymnastics": ["Increase strength while lean", "Improve mobility", "Build explosive power"],
+  "Skateboarding": ["Improve mobility", "Build explosive power"],
+};
+
+// Returns the goal list relevant to the currently selected sport(s).
+// No sports picked yet -> fall back to the full general list.
+function getRelevantGoals(sports) {
+  if (!sports || sports.length === 0) return GOAL_CHOICES;
+  const ordered = [];
+  const seen = new Set();
+  const addGoal = (goal) => {
+    if (!seen.has(goal)) {
+      seen.add(goal);
+      ordered.push(goal);
+    }
+  };
+  sports.forEach((sport) => (SPORT_GOALS[sport] || []).forEach(addGoal));
+  UNIVERSAL_GOALS.forEach(addGoal);
+  return ordered;
+}
 const EXERCISES = [
   // Chest
   ["Barbell Bench Press","Chest","intermediate","4 x 6-8","120s rest","chest | triceps | shoulders"],
@@ -1030,7 +1091,8 @@ function renderProfile() {
   el("selected-sports").textContent = profile.sports.join(", ");
   el("selected-goals").textContent = profile.goals.join(", ");
   el("sport-choices").innerHTML = SPORT_CHOICES.map((item) => '<button type="button" class="choice-button ' + (profile.sports.includes(item) ? "active" : "") + '" data-sport="' + safe(item) + '">' + item + '</button>').join("");
-  el("goal-choices").innerHTML = GOAL_CHOICES.map((item) => '<button type="button" class="choice-button ' + (profile.goals.includes(item) ? "active" : "") + '" data-goal="' + safe(item) + '">' + item + '</button>').join("");
+  const relevantGoals = getRelevantGoals(profile.sports);
+  el("goal-choices").innerHTML = relevantGoals.map((item) => '<button type="button" class="choice-button ' + (profile.goals.includes(item) ? "active" : "") + '" data-goal="' + safe(item) + '">' + item + '</button>').join("");
   all("[data-sport]").forEach((button) => button.addEventListener("click", () => toggleChoice("sports", button.dataset.sport)));
   all("[data-goal]").forEach((button) => button.addEventListener("click", () => toggleChoice("goals", button.dataset.goal)));
   const form = el("profile-form");
@@ -1052,6 +1114,14 @@ function toggleChoice(key, value) {
     state.profile[key] = list.filter((item) => item !== value);
   } else {
     state.profile[key] = [...list, value];
+  }
+  if (key === "sports") {
+    // Sport list changed - drop any selected goals that no longer make sense
+    // for the new set of sports, and fall back to a sensible default if that
+    // empties the list out entirely.
+    const relevantGoals = getRelevantGoals(state.profile.sports);
+    const keptGoals = state.profile.goals.filter((goal) => relevantGoals.includes(goal));
+    state.profile.goals = keptGoals.length > 0 ? keptGoals : [relevantGoals[0] || "General fitness"];
   }
   saveState();
   renderProfile();
