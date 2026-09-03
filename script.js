@@ -1,4 +1,5 @@
 const STORAGE_KEY = "flexfit-ai-dashboard";
+const GUEST_STORAGE_KEY = "flexfit-ai-dashboard-guest-session";
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DEFAULT_PROFILE = {
   age: 20,
@@ -105,7 +106,7 @@ const num = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(val
 
 function defaultState() {
   return {
-    session: { signedIn: false, name: "" },
+    session: { signedIn: false, name: "", guest: false },
     onboarded: false,
     theme: "system",
     profile: { ...DEFAULT_PROFILE, sports: [...DEFAULT_PROFILE.sports], goals: [...DEFAULT_PROFILE.goals] },
@@ -115,38 +116,82 @@ function defaultState() {
     completedWorkouts: [],
     weightHistory: [],
     ingredients: [],
-    chat: [],
+    jiyaChats: [],
+    activeChatId: null,
     dietGenerated: false,
     workoutVersion: 0,
     recommendations: false,
   };
 }
 
+function newChatObject() {
+  return {
+    id: "chat-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+    title: "New chat",
+    createdAt: Date.now(),
+    messages: [],
+  };
+}
+
+function deriveChatTitle(messages) {
+  const firstUser = messages.find((message) => message.role === "user");
+  if (!firstUser || !firstUser.text) return "New chat";
+  const text = firstUser.text.trim();
+  return text.length > 42 ? text.slice(0, 42) + "..." : text;
+}
+
+function mergeState(fallback, saved) {
+  if (!saved) return fallback;
+  const merged = {
+    ...fallback,
+    ...saved,
+    session: { ...fallback.session, ...(saved.session || {}) },
+    profile: { ...fallback.profile, ...(saved.profile || {}) },
+    targets: { ...fallback.targets, ...(saved.targets || {}) },
+    meals: Array.isArray(saved.meals) ? saved.meals : [],
+    cardioSessions: Array.isArray(saved.cardioSessions) ? saved.cardioSessions : [],
+    completedWorkouts: Array.isArray(saved.completedWorkouts) ? saved.completedWorkouts : [],
+    weightHistory: Array.isArray(saved.weightHistory) ? saved.weightHistory : [],
+    ingredients: Array.isArray(saved.ingredients) ? saved.ingredients : [],
+    jiyaChats: Array.isArray(saved.jiyaChats) ? saved.jiyaChats.filter((chat) => chat && Array.isArray(chat.messages)) : [],
+  };
+
+  // Migrate the old single flat "chat" array (pre chat-history feature) into one saved conversation.
+  if (!merged.jiyaChats.length && Array.isArray(saved.chat) && saved.chat.length) {
+    const migrated = newChatObject();
+    migrated.messages = saved.chat.filter((message) => message && !message.pending);
+    migrated.title = deriveChatTitle(migrated.messages);
+    merged.jiyaChats = [migrated];
+  }
+  delete merged.chat;
+
+  merged.activeChatId = merged.jiyaChats.some((chat) => chat.id === saved.activeChatId)
+    ? saved.activeChatId
+    : (merged.jiyaChats[0] ? merged.jiyaChats[0].id : null);
+
+  return merged;
+}
+
 function loadState() {
   const fallback = defaultState();
   try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (!saved) return fallback;
-    return {
-      ...fallback,
-      ...saved,
-      session: { ...fallback.session, ...(saved.session || {}) },
-      profile: { ...fallback.profile, ...(saved.profile || {}) },
-      targets: { ...fallback.targets, ...(saved.targets || {}) },
-      meals: Array.isArray(saved.meals) ? saved.meals : [],
-      cardioSessions: Array.isArray(saved.cardioSessions) ? saved.cardioSessions : [],
-      completedWorkouts: Array.isArray(saved.completedWorkouts) ? saved.completedWorkouts : [],
-      weightHistory: Array.isArray(saved.weightHistory) ? saved.weightHistory : [],
-      ingredients: Array.isArray(saved.ingredients) ? saved.ingredients : [],
-      chat: Array.isArray(saved.chat) ? saved.chat : [],
-    };
+    const guestRaw = sessionStorage.getItem(GUEST_STORAGE_KEY);
+    if (guestRaw) return mergeState(fallback, JSON.parse(guestRaw));
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return fallback;
+    return mergeState(fallback, JSON.parse(raw));
   } catch {
     return fallback;
   }
 }
 
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  const payload = JSON.stringify(state);
+  if (state.session.guest) {
+    sessionStorage.setItem(GUEST_STORAGE_KEY, payload);
+  } else {
+    localStorage.setItem(STORAGE_KEY, payload);
+  }
 }
 
 function safe(value) {
@@ -477,12 +522,35 @@ function coachReply(prompt) {
   return "I didn't quite catch that. Try asking about a workout, a meal plan, your protein/calorie targets, cardio, or your progress.";
 }
 
+function activeChat() {
+  return state.jiyaChats.find((chat) => chat.id === state.activeChatId) || null;
+}
+
 function renderChat() {
-  el("chat-log").innerHTML = state.chat.map((message) => '<div class="chat-message ' + message.role + (message.pending ? " pending" : "") + '">' + safe(message.text) + "</div>").join("");
+  const chat = activeChat();
+  const messages = chat ? chat.messages : [];
+  el("chat-log").innerHTML = messages.map((message) => '<div class="chat-message ' + message.role + (message.pending ? " pending" : "") + '">' + safe(message.text) + "</div>").join("");
   el("chat-log").scrollTop = el("chat-log").scrollHeight;
 }
 
-async function fetchJiyaReply(message) {
+function renderChatHistory() {
+  const list = el("chat-history-list");
+  if (!list) return;
+  if (!state.jiyaChats.length) {
+    list.innerHTML = '<p class="chat-history-empty">No conversations yet - ask Jiya something to start one.</p>';
+    return;
+  }
+  list.innerHTML = state.jiyaChats.map((chat) => {
+    const active = chat.id === state.activeChatId;
+    const dateLabel = new Date(chat.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return '<button type="button" class="chat-history-item' + (active ? " active" : "") + '" data-chat-id="' + chat.id + '">' +
+      '<span class="chat-history-title">' + safe(chat.title) + "</span>" +
+      '<span class="chat-history-date">' + dateLabel + "</span>" +
+      "</button>";
+  }).join("");
+}
+
+async function fetchJiyaReply(message, chat) {
   try {
     const response = await fetch("/api/jiya", {
       method: "POST",
@@ -491,7 +559,7 @@ async function fetchJiyaReply(message) {
         message: message,
         profile: state.profile,
         targets: state.targets,
-        history: state.chat.slice(-6).map((m) => ({ role: m.role, text: m.text })),
+        history: (chat ? chat.messages : []).filter((m) => !m.pending).slice(-6).map((m) => ({ role: m.role, text: m.text })),
       }),
     });
     if (!response.ok) throw new Error("bad status " + response.status);
@@ -510,22 +578,30 @@ async function fetchJiyaReply(message) {
 async function addChat(prompt) {
   const clean = prompt.trim();
   if (!clean) return;
-  state.chat.push({ role: "user", text: clean });
-  state.chat.push({ role: "jiya", text: "Thinking...", pending: true });
-  state.chat = state.chat.slice(-12);
+  let chat = activeChat();
+  if (!chat) {
+    chat = newChatObject();
+    state.jiyaChats.unshift(chat);
+    state.activeChatId = chat.id;
+  }
+  chat.messages.push({ role: "user", text: clean });
+  if (chat.title === "New chat") chat.title = deriveChatTitle(chat.messages);
+  chat.messages.push({ role: "jiya", text: "Thinking...", pending: true });
+  state.jiyaChats = state.jiyaChats.slice(0, 30);
   saveState();
   renderChat();
-  const reply = await fetchJiyaReply(clean);
-  const last = state.chat[state.chat.length - 1];
+  renderChatHistory();
+  const reply = await fetchJiyaReply(clean, chat);
+  const last = chat.messages[chat.messages.length - 1];
   if (last && last.pending) {
     last.text = reply;
     delete last.pending;
   } else {
-    state.chat.push({ role: "jiya", text: reply });
-    state.chat = state.chat.slice(-12);
+    chat.messages.push({ role: "jiya", text: reply });
   }
   saveState();
   renderChat();
+  renderChatHistory();
 }
 
 function renderProgress() {
@@ -732,7 +808,7 @@ function decodeGoogleCredential(token) {
 function handleGoogleCredential(response) {
   const payload = decodeGoogleCredential(response.credential);
   const name = (payload && payload.name) || "Google User";
-  state.session = { signedIn: true, name, provider: "google" };
+  state.session = { signedIn: true, name, provider: "google", guest: false };
   saveState();
   applyAuthGate();
   toast("Welcome, " + name + "!");
@@ -773,10 +849,21 @@ function events() {
     applyTheme();
   });
   el("sign-out").addEventListener("click", () => {
-    state.session = { signedIn: false, name: "" };
-    saveState();
+    const wasGuest = state.session.guest;
+    if (wasGuest) {
+      // Guest data lives only in sessionStorage for this tab - drop it entirely on sign out
+      // rather than writing it into the persistent slot, so it never leaks into the next
+      // person's (or device's) session.
+      sessionStorage.removeItem(GUEST_STORAGE_KEY);
+      state = loadState();
+      state.session = { signedIn: false, name: "", guest: false };
+    } else {
+      state.session = { signedIn: false, name: "", guest: false };
+      saveState();
+    }
     applyAuthGate();
-    toast("Signed out. Your data stays saved on this device.");
+    renderAll();
+    toast(wasGuest ? "Guest session ended - nothing from it was saved." : "Signed out. Your data stays saved on this device.");
   });
   all("[data-auth-tab]").forEach((button) => button.addEventListener("click", () => {
     all("[data-auth-tab]").forEach((b) => { b.classList.toggle("active", b === button); b.setAttribute("aria-selected", b === button ? "true" : "false"); });
@@ -785,15 +872,22 @@ function events() {
   el("auth-form").addEventListener("submit", (event) => {
     event.preventDefault();
     const name = el("auth-name").value.trim();
-    state.session = { signedIn: true, name };
+    state.session = { signedIn: true, name, guest: false };
     saveState();
     applyAuthGate();
     toast("Welcome" + (name ? ", " + name : "") + "!");
   });
   el("auth-guest").addEventListener("click", () => {
-    state.session = { signedIn: true, name: "Guest" };
+    // Guest mode always starts from a completely clean slate, kept in this tab's
+    // sessionStorage only - it never reads or overwrites the real signed-in account's
+    // saved profile in localStorage, and it disappears when the tab closes.
+    sessionStorage.removeItem(GUEST_STORAGE_KEY);
+    state = defaultState();
+    state.session = { signedIn: true, name: "Guest", guest: true };
     saveState();
     applyAuthGate();
+    renderAll();
+    toast("Exploring as Guest - nothing here will be saved after this tab closes.");
   });
   el("regenerate-workout").addEventListener("click", () => {
     state.workoutVersion += 1;
@@ -871,6 +965,27 @@ function events() {
     input.value = "";
   });
   all("[data-prompt]").forEach((button) => button.addEventListener("click", () => addChat(button.dataset.prompt)));
+  el("new-chat-button").addEventListener("click", () => {
+    state.activeChatId = null;
+    saveState();
+    renderChat();
+    renderChatHistory();
+    document.body.classList.remove("history-open");
+    el("coach-input").focus();
+  });
+  el("chat-history-list").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-chat-id]");
+    if (!button) return;
+    state.activeChatId = button.dataset.chatId;
+    saveState();
+    renderChat();
+    renderChatHistory();
+    document.body.classList.remove("history-open");
+  });
+  el("mobile-history-toggle").addEventListener("click", () => {
+    const open = document.body.classList.toggle("history-open");
+    el("mobile-history-toggle").setAttribute("aria-expanded", String(open));
+  });
   el("open-weight-modal").addEventListener("click", openWeightModal);
   el("close-modal").addEventListener("click", closeModal);
   el("modal-backdrop").addEventListener("click", (event) => {
@@ -906,6 +1021,7 @@ function renderAll() {
   renderFood();
   renderCardio();
   renderChat();
+  renderChatHistory();
   renderProgress();
   renderProfile();
 }

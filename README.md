@@ -4,13 +4,13 @@ FlexFit AI is a responsive, dark-themed fitness dashboard covering workouts, nut
 
 ## Features
 
-- **Sign In / Create Account** - a local demo gate (name + email, "Sign in with Google", or "Continue as Guest") that walks first-time users through profile setup before unlocking the dashboard. Signing out returns to this screen without deleting saved data.
+- **Sign In / Create Account** - a local demo gate (name + email, "Sign in with Google", or "Continue as Guest") that walks first-time users through profile setup before unlocking the dashboard. Signing in with a name/email or Google remembers your data on this device; signing out returns to this screen without deleting it. **Continue as Guest** is different on purpose: it always starts from a completely clean, unonboarded slate, is stored only for the current browser tab, and is discarded on sign-out or tab close - it never reads or overwrites a signed-in account's saved profile.
 - **Light / Dark / System theme** - a toggle in the sidebar cycles System -> Light -> Dark. "System" follows your OS's color scheme automatically; the other two override it. Your choice is remembered.
 - **Dashboard** - today's calories vs. target, weekly workout count, current/target weight, fitness goal summary, today's training, today's macros, a 7-day calorie chart, and AI-style recommendations.
 - **Workout** - a weekly split with current-day highlighting and completion tracking, an "AI Regenerate" action, and a searchable/filterable exercise library with sets/reps, rest period, muscles worked, and a quick how-to dialog per exercise.
 - **Food** - a generated daily diet plan with swappable meal alternatives, a photo-based food scanner, a nutrition log with running macro totals, and an ingredient-based "Nutrition AI" meal generator.
 - **Cardio** - activity search across categories, a live session timer, MET-based calorie calculation using your profile weight, and session history with running totals.
-- **Jiya AI** - a fitness coach chat with suggested prompts (workout plans, meal plans, protein needs, HIIT).
+- **Jiya AI** - a fitness coach chat with suggested prompts (workout plans, meal plans, protein needs, HIIT), multiple saved conversations with a history sidebar (start a new chat, switch back to any past one), each auto-titled from its first message.
 - **Progress** - weight history, calories burned, and workout consistency charts, all built from your actual logged workout/cardio/weight data, plus a summary panel.
 - **Profile** - multi-select sports and goals, personal details (age, height, weight, target weight, fitness level), which drive the calculated calorie/macro targets shown across the app.
 
@@ -82,17 +82,19 @@ This is a local-only demo sign-in, same as the email/guest options: no server ve
 
 ## How `localStorage` Is Used
 
-All app state lives under a single key, `flexfit-ai-dashboard`, as one JSON object containing:
+All app state for a signed-in (name/email or Google) user lives under a single `localStorage` key, `flexfit-ai-dashboard`, as one JSON object containing:
 
 - session (signed in or not, and a display name) and an `onboarded` flag
 - profile (sports, goals, age, height, weight, target weight, fitness level)
 - calculated calorie/macro targets
 - logged meals, cardio sessions, completed workouts, and weight history
 - saved ingredients for the AI meal generator
-- Jiya chat history
+- `jiyaChats`: an array of saved Jiya conversations (id, title, created date, messages) plus `activeChatId` for which one is open
 - a few UI flags (e.g. whether a diet plan has been generated)
 
-State is loaded once on startup and merged against sensible defaults, so missing or corrupted `localStorage` data never crashes the app - it falls back to defaults instead. Every user action re-saves the whole state object immediately, so a page refresh always restores where you left off.
+State is loaded once on startup and merged against sensible defaults, so missing or corrupted `localStorage` data never crashes the app - it falls back to defaults instead. Every user action re-saves the whole state object immediately, so a page refresh always restores where you left off. An older single flat `chat` array (pre chat-history) is migrated automatically into one `jiyaChats` entry the first time it's loaded.
+
+**Continue as Guest** uses a separate, `sessionStorage`-backed key (`flexfit-ai-dashboard-guest-session`) instead of the `localStorage` one above. It always starts from `defaultState()` - unonboarded, no profile, no chats - so a guest never sees (or overwrites) a signed-in user's saved data, on this device or any other. It's cleared on sign-out or when the tab closes.
 
 ## Limitations
 

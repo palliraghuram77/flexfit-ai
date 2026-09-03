@@ -187,12 +187,19 @@
 
         <section class="page" id="jiya-page" data-page-view="jiya" hidden>
           <div class="page-heading"><h1>Jiya - AI Fitness Trainer</h1><p>Coaching that knows your profile, goals and targets.</p></div>
-          <section class="coach-panel">
-            <div class="coach-intro"><p>Hi, I'm <strong>Jiya</strong> - your AI fitness trainer. Ask me for a workout, a meal plan, or anything about your training and I'll tailor it to your profile.</p></div>
-            <div class="prompt-grid"><button type="button" data-prompt="Generate a push day workout">Generate a push day workout</button><button type="button" data-prompt="Create a meal plan for cutting">Create a meal plan for cutting</button><button type="button" data-prompt="How much protein do I need?">How much protein do I need?</button><button type="button" data-prompt="Give me a HIIT workout for 30 minutes">Give me a HIIT workout for 30 minutes</button></div>
-            <div class="chat-log" id="chat-log" aria-live="polite"></div>
-            <form class="chat-form" id="chat-form"><label class="sr-only" for="coach-input">Ask Jiya anything</label><input id="coach-input" type="text" placeholder="Ask Jiya anything..." /><button class="primary-button" type="submit">Send</button></form>
-          </section>
+          <div class="coach-layout">
+            <aside class="chat-sidebar" id="chat-sidebar" aria-label="Conversation history">
+              <button class="outline-button new-chat-button" type="button" id="new-chat-button">+ New chat</button>
+              <div class="chat-history-list" id="chat-history-list" aria-live="polite"></div>
+            </aside>
+            <section class="coach-panel">
+              <button class="mobile-history-toggle" type="button" id="mobile-history-toggle" aria-expanded="false">History</button>
+              <div class="coach-intro"><p>Hi, I'm <strong>Jiya</strong> - your AI fitness trainer. Ask me for a workout, a meal plan, or anything about your training and I'll tailor it to your profile.</p></div>
+              <div class="prompt-grid"><button type="button" data-prompt="Generate a push day workout">Generate a push day workout</button><button type="button" data-prompt="Create a meal plan for cutting">Create a meal plan for cutting</button><button type="button" data-prompt="How much protein do I need?">How much protein do I need?</button><button type="button" data-prompt="Give me a HIIT workout for 30 minutes">Give me a HIIT workout for 30 minutes</button></div>
+              <div class="chat-log" id="chat-log" aria-live="polite"></div>
+              <form class="chat-form" id="chat-form"><label class="sr-only" for="coach-input">Ask Jiya anything</label><input id="coach-input" type="text" placeholder="Ask Jiya anything..." /><button class="primary-button" type="submit">Send</button></form>
+            </section>
+          </div>
         </section>
 
         <section class="page" id="progress-page" data-page-view="progress" hidden>

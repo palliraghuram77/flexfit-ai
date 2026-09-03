@@ -1292,6 +1292,98 @@ button:disabled {
   background: var(--hover-overlay);
 }
 
+.coach-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  align-items: start;
+  gap: 16px;
+}
+
+.chat-sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  min-height: 470px;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.new-chat-button {
+  width: 100%;
+  justify-content: center;
+}
+
+.chat-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+}
+
+.chat-history-empty {
+  padding: 10px 2px;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.chat-history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  padding: 9px 10px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-align: left;
+}
+
+.chat-history-item:hover {
+  background: var(--hover-overlay);
+  color: var(--text);
+}
+
+.chat-history-item.active {
+  border-color: rgba(235, 122, 88, 0.55);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.chat-history-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.chat-history-date {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 0.66rem;
+}
+
+.chat-history-item.active .chat-history-date {
+  color: var(--accent);
+}
+
+.mobile-history-toggle {
+  display: none;
+  width: 100%;
+  margin-bottom: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  padding: 10px 12px;
+  font-size: 0.78rem;
+}
+
 .progress-layout {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1590,6 +1682,31 @@ button:disabled {
 }
 
 @media (max-width: 940px) {
+  .coach-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .mobile-history-toggle {
+    display: block;
+  }
+
+  .chat-sidebar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 30;
+    min-height: 0;
+    border-radius: 0;
+    transform: translateX(100%);
+    transition: transform 180ms ease;
+  }
+
+  body.history-open .chat-sidebar {
+    transform: translateX(0);
+  }
+
   .sidebar {
     width: 244px;
     transform: translateX(-100%);
