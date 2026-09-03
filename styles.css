@@ -1092,93 +1092,246 @@ button:disabled {
   color: var(--text);
 }
 
-.cardio-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
-  gap: 16px;
-}
-
-.activity-picker h2 {
-  margin-bottom: 14px;
-}
-
-.activity-picker .search-field {
-  max-width: none;
-  margin-bottom: 12px;
-}
-
-.activity-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 9px;
-  margin-top: 15px;
-}
-
-.activity-choice {
-  min-height: 50px;
+/* ── Strava-style Cardio Tracker ── */
+.cardio-setup-panel {
+  background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text);
-  padding: 8px 10px;
-  text-align: left;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 18px;
 }
 
-.activity-choice small {
-  display: block;
-  margin-top: 3px;
+.cardio-setup-panel h2 {
+  margin-bottom: 18px;
+  font-size: 1rem;
   color: var(--muted);
-  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
-.activity-choice.active {
-  border-color: rgba(235, 122, 88, 0.6);
-  background: var(--accent-soft);
-}
-
-.timer-panel {
+.activity-type-grid {
   display: grid;
-  min-height: 370px;
-  place-items: center;
-  align-content: center;
-  text-align: center;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px;
+  margin-bottom: 22px;
 }
 
-.timer-panel > p:first-child {
-  color: var(--muted);
-  font-size: 0.9rem;
-  font-weight: 700;
+.activity-type-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 14px 8px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
 }
 
-.timer {
-  margin: 26px 0 18px;
-  font-size: clamp(2rem, 5vw, 3.3rem);
+.activity-type-btn .act-icon {
+  font-size: 1.6rem;
   line-height: 1;
 }
 
-.burned {
+.activity-type-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.cardio-start-area {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.selected-activity-label {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.selected-activity-label strong {
+  color: var(--text);
+}
+
+.gps-start-btn {
+  font-size: 1rem;
+  padding: 13px 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-icon {
+  font-size: 0.85rem;
+}
+
+.gps-note {
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+/* Live tracking panel */
+.cardio-live-panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 18px;
+}
+
+.live-map-wrapper {
+  position: relative;
+  width: 100%;
+  height: 280px;
+  background: #1a2030;
+  overflow: hidden;
+}
+
+#cardio-map-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.map-no-gps {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 20, 30, 0.75);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.live-gps-dot {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid #fff;
+  box-shadow: 0 0 12px rgba(235,122,88,0.7);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  transition: left 0.8s linear, top 0.8s linear;
+}
+
+.live-stats-bar {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid var(--line);
+  text-align: center;
+}
+
+.live-stat-center {
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+}
+
+.live-stat-value {
+  display: block;
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.1;
+}
+
+.live-timer {
+  display: block;
+  font-size: 1.55rem;
+  font-weight: 700;
   color: var(--accent);
-  font-size: 1.6rem;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
 }
 
-.minutes {
-  margin-top: 13px;
-  font-size: 1.05rem;
-}
-
-.timer-panel > span {
+.live-stat-label {
+  display: block;
+  font-size: 0.7rem;
   color: var(--muted);
-  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 4px;
 }
 
-.timer-panel .primary-button {
-  margin-top: 22px;
+.live-stats-row2 {
+  display: flex;
+  justify-content: space-around;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
 }
 
-.activity-meta {
-  margin-top: 19px;
+.live-stat2 {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.live-stat2 strong {
+  font-size: 1.15rem;
+  color: var(--text);
+}
+
+.live-stat2 span {
+  font-size: 0.68rem;
   color: var(--muted);
-  font-size: 0.71rem;
+  text-transform: uppercase;
+}
+
+.live-controls {
+  display: flex;
+  gap: 12px;
+  padding: 16px 20px;
+  justify-content: center;
+}
+
+.pause-btn {
+  padding: 11px 26px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.finish-btn {
+  padding: 11px 26px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.strava-history {
+  margin-top: 16px;
+}
+
+.history-panel {
+  margin-top: 16px;
+}
+
+.history-totals {
+  display: flex;
+  gap: 30px;
+  margin: 18px 0;
+}
+
+.history-totals div,
+.summary-grid div,
+.target-grid div {
+  display: grid;
+  gap: 4px;
 }
 
 .history-panel {
@@ -1210,6 +1363,42 @@ button:disabled {
   border-top: 1px solid var(--line);
   color: var(--muted);
   font-size: 0.75rem;
+}
+
+.strava-item {
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
+}
+
+.strava-item-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.strava-act-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.strava-item-left strong {
+  display: block;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.strava-item-left small {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.strava-item-stats {
+  display: flex;
+  gap: 20px;
+  padding-left: 46px;
+  font-size: 0.78rem;
+  color: var(--muted);
 }
 
 .coach-panel {
@@ -1763,9 +1952,16 @@ button:disabled {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .dashboard-grid,
-  .cardio-layout {
+  .dashboard-grid {
     grid-template-columns: 1fr;
+  }
+
+  .activity-type-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .live-map-wrapper {
+    height: 220px;
   }
 }
 

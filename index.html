@@ -171,18 +171,65 @@
         </section>
 
         <section class="page" id="cardio-page" data-page-view="cardio" hidden>
-          <div class="page-heading"><h1>Cardio Tracker</h1><p>Pick an activity, hit start and watch the calories climb in real time.</p></div>
-          <div class="cardio-layout">
-            <section class="activity-picker" aria-labelledby="activity-title">
-              <h2 id="activity-title">Choose your activity</h2>
-              <label class="search-field"><span class="sr-only">Search activities</span><input type="search" id="activity-search" placeholder="Search activities..." /></label>
-              <div class="filter-row" id="activity-filters"></div><div class="activity-list" id="activity-list"></div>
-            </section>
-            <section class="timer-panel">
-              <p id="selected-activity">Jogging (8 km/h)</p><strong class="timer" id="cardio-timer">00:00:00</strong><strong class="burned" id="cardio-burned">0</strong><span>kcal burned</span><strong class="minutes" id="cardio-minutes">0</strong><span>minutes</span><button class="primary-button" type="button" id="cardio-toggle">Start</button><p class="activity-meta" id="activity-meta">MET 8.3 &middot; body weight 73 kg</p>
-            </section>
+          <div class="page-heading"><h1>Live Cardio Tracker</h1><p>Strava-style GPS tracking — see your route drawn in real time as you move.</p></div>
+
+          <!-- Activity type selector (shown before session starts) -->
+          <div id="cardio-setup" class="cardio-setup-panel">
+            <h2>Choose Activity</h2>
+            <div class="activity-type-grid" id="activity-type-grid"></div>
+            <div class="cardio-start-area">
+              <p class="selected-activity-label">Selected: <strong id="selected-activity-name">Running</strong></p>
+              <button class="primary-button gps-start-btn" type="button" id="cardio-start-btn">
+                <span class="btn-icon">▶</span> Start GPS Session
+              </button>
+              <p class="gps-note" id="gps-note">GPS required — allow location access when prompted.</p>
+            </div>
           </div>
-          <section class="history-panel"><div class="panel-title"><h2>Session history</h2></div><div class="history-totals"><div><strong id="cardio-total-kcal">0</strong><span>total kcal</span></div><div><strong id="cardio-total-minutes">0</strong><span>total minutes</span></div></div><div id="cardio-history"></div></section>
+
+          <!-- Live tracking view (shown during active session) -->
+          <div id="cardio-live" class="cardio-live-panel" hidden>
+            <div class="live-map-wrapper">
+              <canvas id="cardio-map-canvas"></canvas>
+              <div class="map-no-gps" id="map-no-gps" hidden>
+                <p>📍 Waiting for GPS signal…</p>
+              </div>
+              <div class="live-gps-dot" id="live-gps-dot" hidden></div>
+            </div>
+            <div class="live-stats-bar">
+              <div class="live-stat">
+                <span class="live-stat-value" id="live-distance">0.00</span>
+                <span class="live-stat-label">km</span>
+              </div>
+              <div class="live-stat live-stat-center">
+                <span class="live-timer" id="cardio-timer">00:00:00</span>
+                <span class="live-stat-label" id="live-activity-name">Running</span>
+              </div>
+              <div class="live-stat">
+                <span class="live-stat-value" id="live-pace">--:--</span>
+                <span class="live-stat-label">min/km</span>
+              </div>
+            </div>
+            <div class="live-stats-row2">
+              <div class="live-stat2"><strong id="cardio-burned">0</strong><span>kcal</span></div>
+              <div class="live-stat2"><strong id="live-speed">0.0</strong><span>km/h</span></div>
+              <div class="live-stat2"><strong id="live-elevation">0</strong><span>m elev gain</span></div>
+            </div>
+            <div class="live-controls">
+              <button class="pause-btn" type="button" id="cardio-pause-btn">⏸ Pause</button>
+              <button class="finish-btn" type="button" id="cardio-finish-btn">🏁 Finish</button>
+            </div>
+          </div>
+
+          <!-- Session history -->
+          <section class="history-panel strava-history">
+            <div class="panel-title"><h2>Your Activities</h2></div>
+            <div class="history-totals">
+              <div><strong id="cardio-total-kcal">0</strong><span>total kcal</span></div>
+              <div><strong id="cardio-total-minutes">0</strong><span>total minutes</span></div>
+              <div><strong id="cardio-total-km">0.0</strong><span>total km</span></div>
+            </div>
+            <div id="cardio-history"></div>
+          </section>
         </section>
 
         <section class="page" id="jiya-page" data-page-view="jiya" hidden>

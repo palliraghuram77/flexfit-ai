@@ -75,28 +75,32 @@ const EXERCISES = [
   ["Single-Leg Calf Raise", "Calves", "intermediate", "3 x 12 each", "45s rest", "calves"],
   ["Jump Rope", "Calves", "beginner", "3 x 60s", "45s rest", "calves | cardio"],
 ];
-const ACTIVITIES = {
-  Walking: [["Brisk walking", 4.3]],
-  Running: [["Jogging (8 km/h)", 8.3], ["Running (10 km/h)", 9.8], ["Running (12 km/h)", 11.5], ["Running (16 km/h)", 14.5], ["Treadmill intervals", 12.2]],
-  Cycling: [["Cycling (moderate)", 7.5]],
-  Swimming: [["Freestyle swimming", 8.3]],
-  Gym: [["Strength training", 5]],
-  HIIT: [["HIIT circuit", 10.5]],
-  Yoga: [["Vinyasa yoga", 3.8]],
-  "Team Sports": [["Football practice", 7]],
-  "Racquet Sports": [["Tennis singles", 8]],
-  Combat: [["Boxing conditioning", 9]],
-  "Winter Sports": [["Skiing", 7]],
-  "Low Intensity": [["Mobility flow", 2.8]],
-  Other: [["General cardio", 6]],
-};
+
 
 let state = loadState();
 let exerciseGroup = "Chest";
-let activityGroup = "Running";
-let selectedActivity = { name: "Jogging (8 km/h)", met: 8.3 };
+// ── Strava-style GPS cardio tracker state ──
 let cardioSeconds = 0;
 let cardioTimer = null;
+let cardioGpsWatch = null;
+let cardioRoute = []; // [{lat, lng, alt, t}]
+let cardioElevGain = 0;
+let cardioPaused = false;
+let cardioSelectedActivity = { name: "Running", met: 9.8, icon: "🏃" };
+const CARDIO_ACTIVITIES = [
+  { name: "Running",     met: 9.8,  icon: "🏃" },
+  { name: "Cycling",     met: 7.5,  icon: "🚴" },
+  { name: "Walking",     met: 3.5,  icon: "🚶" },
+  { name: "Hiking",      met: 6.0,  icon: "🥾" },
+  { name: "Swimming",    met: 8.0,  icon: "🏊" },
+  { name: "Rowing",      met: 7.0,  icon: "🚣" },
+  { name: "HIIT",        met: 10.0, icon: "⚡" },
+  { name: "Football",    met: 7.0,  icon: "⚽" },
+  { name: "Basketball",  met: 6.5,  icon: "🏀" },
+  { name: "Jump Rope",   met: 12.0, icon: "🪢" },
+  { name: "Yoga",        met: 3.0,  icon: "🧘" },
+  { name: "Dance",       met: 5.5,  icon: "💃" },
+];
 let toastTimer = null;
 let uploadUrl = "";
 
@@ -342,10 +346,13 @@ function renderWorkout() {
     const id = today() + "-" + index;
     const complete = state.completedWorkouts.some((item) => item.id === id);
     const rest = session[4];
-    const todayLabel = session[0] === "Saturday" ? '<span class="today-label">Today</span>' : "";
+    const FULL_DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+    const realToday = FULL_DAYS[new Date().getDay()];
+    const isToday = session[0] === realToday;
+    const todayLabel = isToday ? '<span class="today-label">Today</span>' : "";
     const action = rest ? "" : '<button class="outline-button view-exercises" type="button" data-group="' + safe(session[3]) + '">View Exercises</button>';
     const completeButton = rest ? "" : '<button class="complete-button ' + (complete ? "done" : "") + '" type="button" data-workout="' + index + '">' + (complete ? "Completed" : "Complete") + '</button>';
-    return '<article class="week-card ' + (session[0] === "Saturday" ? "today" : "") + '">' + completeButton + '<span class="day-label">' + session[0] + '</span>' + todayLabel + '<h3>' + session[1] + '</h3><p>' + session[2] + '</p>' + action + '</article>';
+    return '<article class="week-card ' + (isToday ? "today" : "") + '">' + completeButton + '<span class="day-label">' + session[0] + '</span>' + todayLabel + '<h3>' + session[1] + '</h3><p>' + session[2] + '</p>' + action + '</article>';
   }).join("");
   all("[data-workout]").forEach((button) => button.addEventListener("click", () => {
     const index = num(button.dataset.workout);
@@ -441,65 +448,226 @@ function renderFood() {
   renderIngredients();
 }
 
-function cardioCalories(seconds) {
-  return selectedActivity.met * num(state.profile.weight) * 3.5 * seconds / (200 * 60);
+// ── GPS / haversine helpers ──
+function haversineKm(a, b) {
+  const R = 6371;
+  const dLat = (b.lat - a.lat) * Math.PI / 180;
+  const dLng = (b.lng - a.lng) * Math.PI / 180;
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
 }
 
-function updateTimer() {
-  const hours = Math.floor(cardioSeconds / 3600);
-  const minutes = Math.floor(cardioSeconds % 3600 / 60);
-  const seconds = cardioSeconds % 60;
-  el("cardio-timer").textContent = [hours, minutes, seconds].map((item) => String(item).padStart(2, "0")).join(":");
+function totalRouteKm(route) {
+  let d = 0;
+  for (let i = 1; i < route.length; i++) d += haversineKm(route[i - 1], route[i]);
+  return d;
+}
+
+function cardioCalories(seconds) {
+  return cardioSelectedActivity.met * num(state.profile.weight || 70) * 3.5 * seconds / (200 * 60);
+}
+
+function fmtTime(s) {
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+  return [h, m, sec].map((x) => String(x).padStart(2, "0")).join(":");
+}
+
+function fmtPace(km, seconds) {
+  if (km < 0.01) return "--:--";
+  const secPerKm = seconds / km;
+  return Math.floor(secPerKm / 60) + ":" + String(Math.round(secPerKm % 60)).padStart(2, "0");
+}
+
+// ── Map canvas drawing ──
+function drawRoute() {
+  const canvas = el("cardio-map-canvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const W = canvas.offsetWidth, H = canvas.offsetHeight;
+  canvas.width = W; canvas.height = H;
+  ctx.clearRect(0, 0, W, H);
+
+  // dark map background with subtle grid
+  ctx.fillStyle = "#1a2030";
+  ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = "rgba(255,255,255,0.05)";
+  ctx.lineWidth = 1;
+  for (let x = 0; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+  for (let y = 0; y < H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+  if (cardioRoute.length < 2) return;
+
+  const lats = cardioRoute.map((p) => p.lat), lngs = cardioRoute.map((p) => p.lng);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+  const pad = 40;
+  const scaleX = (maxLng === minLng) ? 1 : (W - pad * 2) / (maxLng - minLng);
+  const scaleY = (maxLat === minLat) ? 1 : (H - pad * 2) / (maxLat - minLat);
+  const toX = (lng) => pad + (lng - minLng) * scaleX;
+  const toY = (lat) => H - pad - (lat - minLat) * scaleY;
+
+  // glow trail
+  ctx.shadowBlur = 10;
+  ctx.shadowColor = "#eb7a58";
+  ctx.strokeStyle = "#eb7a58";
+  ctx.lineWidth = 3;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  cardioRoute.forEach((p, i) => {
+    i === 0 ? ctx.moveTo(toX(p.lng), toY(p.lat)) : ctx.lineTo(toX(p.lng), toY(p.lat));
+  });
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // start dot (green)
+  const sp = cardioRoute[0];
+  ctx.fillStyle = "#4ade80";
+  ctx.beginPath();
+  ctx.arc(toX(sp.lng), toY(sp.lat), 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  // current position dot — update the floating dot overlay
+  const lp = cardioRoute[cardioRoute.length - 1];
+  const dotEl = el("live-gps-dot");
+  if (dotEl) {
+    dotEl.hidden = false;
+    dotEl.style.left = toX(lp.lng) + "px";
+    dotEl.style.top = toY(lp.lat) + "px";
+  }
+}
+
+function updateLiveStats() {
+  const km = totalRouteKm(cardioRoute);
+  el("cardio-timer").textContent = fmtTime(cardioSeconds);
+  el("live-distance").textContent = km.toFixed(2);
+  el("live-pace").textContent = fmtPace(km, cardioSeconds);
   el("cardio-burned").textContent = Math.round(cardioCalories(cardioSeconds));
-  el("cardio-minutes").textContent = Math.floor(cardioSeconds / 60);
-  el("selected-activity").textContent = selectedActivity.name;
-  el("activity-meta").textContent = "MET " + selectedActivity.met + " | body weight " + weight(state.profile.weight) + " kg";
-  el("cardio-toggle").textContent = cardioTimer ? "Finish session" : "Start";
+  el("live-elevation").textContent = Math.round(cardioElevGain);
+  // speed: last 3 points avg
+  if (cardioRoute.length >= 2) {
+    const recent = cardioRoute.slice(-3);
+    let d = 0;
+    for (let i = 1; i < recent.length; i++) d += haversineKm(recent[i - 1], recent[i]);
+    const dt = (recent[recent.length - 1].t - recent[0].t) / 3600000;
+    el("live-speed").textContent = dt > 0 ? (d / dt).toFixed(1) : "0.0";
+  }
 }
 
 function renderCardio() {
-  const groups = Object.keys(ACTIVITIES);
-  el("activity-filters").innerHTML = groups.map((group) => '<button type="button" class="' + (group === activityGroup ? "active" : "") + '" data-activity-group="' + safe(group) + '">' + group + '</button>').join("");
-  all("[data-activity-group]").forEach((button) => button.addEventListener("click", () => {
-    activityGroup = button.dataset.activityGroup;
+  // activity type grid
+  el("activity-type-grid").innerHTML = CARDIO_ACTIVITIES.map((a) =>
+    '<button type="button" class="activity-type-btn' + (cardioSelectedActivity.name === a.name ? " active" : "") + '" data-act="' + safe(a.name) + '">' +
+    '<span class="act-icon">' + a.icon + '</span>' + a.name + '</button>'
+  ).join("");
+  all("[data-act]").forEach((btn) => btn.addEventListener("click", () => {
+    cardioSelectedActivity = CARDIO_ACTIVITIES.find((a) => a.name === btn.dataset.act) || cardioSelectedActivity;
+    el("selected-activity-name").textContent = cardioSelectedActivity.name;
     renderCardio();
   }));
-  const query = el("activity-search").value.trim().toLowerCase();
-  const current = ACTIVITIES[activityGroup].filter((item) => item[0].toLowerCase().includes(query));
-  el("activity-list").innerHTML = current.map((item) => '<button class="activity-choice ' + (selectedActivity.name === item[0] ? "active" : "") + '" type="button" data-activity="' + safe(item[0]) + '" data-met="' + item[1] + '">' + item[0] + '<small>MET ' + item[1] + '</small></button>').join("");
-  all("[data-activity]").forEach((button) => button.addEventListener("click", () => {
-    selectedActivity = { name: button.dataset.activity, met: num(button.dataset.met) };
-    cardioSeconds = 0;
-    renderCardio();
-  }));
-  const calories = state.cardioSessions.reduce((sum, item) => sum + num(item.calories), 0);
-  const minutes = state.cardioSessions.reduce((sum, item) => sum + num(item.seconds) / 60, 0);
+  el("selected-activity-name").textContent = cardioSelectedActivity.name;
+
+  // totals & history
+  const calories = state.cardioSessions.reduce((sum, s) => sum + num(s.calories), 0);
+  const minutes = state.cardioSessions.reduce((sum, s) => sum + num(s.seconds) / 60, 0);
+  const km = state.cardioSessions.reduce((sum, s) => sum + num(s.km || 0), 0);
   el("cardio-total-kcal").textContent = Math.round(calories);
   el("cardio-total-minutes").textContent = Math.round(minutes);
-  el("cardio-history").innerHTML = state.cardioSessions.length ? state.cardioSessions.slice().reverse().slice(0, 8).map((item) => '<div class="history-item"><span>' + safe(item.name) + '</span><span>' + Math.round(item.calories) + " kcal | " + Math.max(1, Math.round(item.seconds / 60)) + ' min</span></div>').join("") : '<div class="empty-state">No sessions yet.</div>';
-  updateTimer();
+  if (el("cardio-total-km")) el("cardio-total-km").textContent = km.toFixed(1);
+  el("cardio-history").innerHTML = state.cardioSessions.length
+    ? state.cardioSessions.slice().reverse().slice(0, 10).map((s) =>
+        '<div class="history-item strava-item">' +
+        '<div class="strava-item-left"><span class="strava-act-icon">' + (s.icon || "🏃") + '</span>' +
+        '<div><strong>' + safe(s.name) + '</strong><small>' + s.date + '</small></div></div>' +
+        '<div class="strava-item-stats">' +
+        '<span>' + (num(s.km || 0)).toFixed(2) + ' km</span>' +
+        '<span>' + Math.round(s.calories) + ' kcal</span>' +
+        '<span>' + fmtTime(num(s.seconds)) + '</span>' +
+        '</div></div>'
+      ).join("")
+    : '<div class="empty-state">No activities yet. Hit Start to record your first session.</div>';
 }
 
-function toggleCardio() {
-  if (cardioTimer) {
-    window.clearInterval(cardioTimer);
-    cardioTimer = null;
-    if (cardioSeconds > 0) {
-      state.cardioSessions.push({ id: String(Date.now()), date: today(), name: selectedActivity.name, seconds: cardioSeconds, calories: cardioCalories(cardioSeconds) });
-      saveState();
-      toast("Cardio session saved.");
-    }
-    cardioSeconds = 0;
-    renderCardio();
-    renderDashboard();
-    renderProgress();
-  } else {
-    cardioTimer = window.setInterval(() => {
-      cardioSeconds += 1;
-      updateTimer();
-    }, 1000);
-    updateTimer();
+function startGpsSession() {
+  if (!navigator.geolocation) {
+    toast("GPS not available on this device.");
+    return;
   }
+  // switch to live view
+  el("cardio-setup").hidden = true;
+  el("cardio-live").hidden = false;
+  el("live-activity-name").textContent = cardioSelectedActivity.name;
+  cardioSeconds = 0;
+  cardioRoute = [];
+  cardioElevGain = 0;
+  cardioPaused = false;
+  el("map-no-gps").hidden = false;
+  el("live-gps-dot").hidden = true;
+
+  // timer
+  cardioTimer = window.setInterval(() => {
+    if (!cardioPaused) { cardioSeconds++; updateLiveStats(); }
+  }, 1000);
+
+  // GPS watch
+  cardioGpsWatch = navigator.geolocation.watchPosition(
+    (pos) => {
+      el("map-no-gps").hidden = true;
+      if (cardioPaused) return;
+      const point = { lat: pos.coords.latitude, lng: pos.coords.longitude, alt: pos.coords.altitude || 0, t: Date.now() };
+      if (cardioRoute.length > 0) {
+        const last = cardioRoute[cardioRoute.length - 1];
+        const dist = haversineKm(last, point);
+        if (dist < 0.003) return; // ignore jitter < 3 m
+        if (point.alt && last.alt && point.alt > last.alt) cardioElevGain += point.alt - last.alt;
+      }
+      cardioRoute.push(point);
+      drawRoute();
+      updateLiveStats();
+    },
+    (err) => {
+      el("map-no-gps").hidden = false;
+      el("map-no-gps").querySelector("p").textContent = "📍 GPS error: " + err.message;
+    },
+    { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
+  );
+}
+
+function pauseGpsSession() {
+  cardioPaused = !cardioPaused;
+  el("cardio-pause-btn").textContent = cardioPaused ? "▶ Resume" : "⏸ Pause";
+}
+
+function finishGpsSession() {
+  if (cardioTimer) { window.clearInterval(cardioTimer); cardioTimer = null; }
+  if (cardioGpsWatch !== null) { navigator.geolocation.clearWatch(cardioGpsWatch); cardioGpsWatch = null; }
+  const km = totalRouteKm(cardioRoute);
+  if (cardioSeconds > 10) {
+    state.cardioSessions.push({
+      id: String(Date.now()),
+      date: today(),
+      name: cardioSelectedActivity.name,
+      icon: cardioSelectedActivity.icon,
+      seconds: cardioSeconds,
+      calories: cardioCalories(cardioSeconds),
+      km: km,
+      elevGain: cardioElevGain,
+    });
+    saveState();
+    toast("Activity saved — great work!");
+  } else {
+    toast("Session too short to save.");
+  }
+  cardioSeconds = 0;
+  cardioRoute = [];
+  cardioElevGain = 0;
+  cardioPaused = false;
+  el("cardio-live").hidden = true;
+  el("cardio-setup").hidden = false;
+  el("cardio-pause-btn").textContent = "⏸ Pause";
+  renderCardio();
+  renderDashboard();
+  renderProgress();
 }
 
 function coachReply(prompt) {
@@ -956,8 +1124,9 @@ function events() {
     const foods = state.ingredients.length ? state.ingredients.join(", ") : "your pantry ingredients";
     el("ai-meal-results").innerHTML = '<div><strong>Quick bowl</strong>Build a high-protein bowl with ' + safe(foods) + ' and a measured carb base.</div><div><strong>Recovery plate</strong>Pair ' + safe(foods) + " with vegetables, a protein source and olive oil.</div>";
   });
-  el("activity-search").addEventListener("input", renderCardio);
-  el("cardio-toggle").addEventListener("click", toggleCardio);
+  el("cardio-start-btn").addEventListener("click", startGpsSession);
+  el("cardio-pause-btn").addEventListener("click", pauseGpsSession);
+  el("cardio-finish-btn").addEventListener("click", finishGpsSession);
   el("chat-form").addEventListener("submit", (event) => {
     event.preventDefault();
     const input = el("coach-input");
