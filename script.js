@@ -14,66 +14,142 @@ const DEFAULT_TARGETS = { calories: 2850, protein: 180, carbs: 350, fat: 80 };
 const SPORT_CHOICES = ["Bodybuilding", "Powerlifting", "CrossFit", "Running", "Trail Running", "Sprinting", "Martial Arts", "Boxing", "Kickboxing", "Brazilian Jiu-Jitsu", "Wrestling", "Cycling", "Mountain Biking", "Swimming", "Triathlon", "Yoga", "Pilates", "Calisthenics", "Rock Climbing", "Hiking", "Football", "Basketball", "Tennis", "Badminton", "Table Tennis", "Volleyball", "Cricket", "Baseball", "Golf", "Rugby", "Hockey", "Skiing", "Snowboarding", "Surfing", "Rowing", "Dance", "Gymnastics", "Skateboarding"];
 const GOAL_CHOICES = ["Lean bulk", "Boxing conditioning", "Body recomposition", "Increase strength while lean", "Run a 10K", "Return from injury", "Build endurance", "Improve mobility", "General fitness"];
 const EXERCISES = [
-  ["Barbell Bench Press", "Chest", "intermediate", "4 x 6-8", "120s rest", "chest | triceps | shoulders"],
-  ["Incline Dumbbell Press", "Chest", "beginner", "4 x 8-10", "90s rest", "chest | shoulders"],
-  ["Push-Up", "Chest", "beginner", "3 x 12-20", "60s rest", "chest | triceps | core"],
-  ["Cable Chest Fly", "Chest", "beginner", "3 x 12-15", "60s rest", "chest"],
-  ["Dumbbell Chest Press", "Chest", "beginner", "4 x 8-12", "90s rest", "chest | triceps"],
-  ["Weighted Dip", "Chest", "advanced", "3 x 6-10", "120s rest", "chest | triceps"],
-  ["Decline Barbell Press", "Chest", "intermediate", "4 x 8-10", "90s rest", "chest | triceps"],
-  ["Pec Deck Machine", "Chest", "beginner", "3 x 12-15", "60s rest", "chest"],
-  ["Barbell Row", "Back", "intermediate", "4 x 8-10", "90s rest", "back | biceps"],
-  ["Lat Pulldown", "Back", "beginner", "3 x 10-12", "75s rest", "back | biceps"],
-  ["Pull-Up", "Back", "intermediate", "4 x 6-10", "90s rest", "back | biceps"],
-  ["Seated Cable Row", "Back", "beginner", "3 x 10-12", "75s rest", "back | biceps"],
-  ["Single-Arm Dumbbell Row", "Back", "beginner", "3 x 10-12", "60s rest", "back | biceps"],
-  ["Deadlift", "Back", "advanced", "4 x 5-6", "150s rest", "back | hamstrings | glutes"],
-  ["T-Bar Row", "Back", "intermediate", "4 x 8-10", "90s rest", "back | biceps"],
-  ["Standing Shoulder Press", "Shoulders", "intermediate", "4 x 8-10", "90s rest", "shoulders | triceps"],
-  ["Lateral Raise", "Shoulders", "beginner", "3 x 12-15", "45s rest", "shoulders"],
-  ["Face Pull", "Shoulders", "beginner", "3 x 15-20", "45s rest", "shoulders | back"],
-  ["Arnold Press", "Shoulders", "intermediate", "3 x 8-10", "75s rest", "shoulders | triceps"],
-  ["Front Raise", "Shoulders", "beginner", "3 x 12-15", "45s rest", "shoulders"],
-  ["Rear Delt Fly", "Shoulders", "beginner", "3 x 12-15", "45s rest", "shoulders | back"],
-  ["Barbell Curl", "Biceps", "beginner", "3 x 8-12", "60s rest", "biceps"],
-  ["Dumbbell Hammer Curl", "Biceps", "beginner", "3 x 10-12", "60s rest", "biceps | forearms"],
-  ["Incline Dumbbell Curl", "Biceps", "intermediate", "3 x 10-12", "60s rest", "biceps"],
-  ["Preacher Curl", "Biceps", "intermediate", "3 x 8-10", "60s rest", "biceps"],
-  ["Cable Curl", "Biceps", "beginner", "3 x 12-15", "45s rest", "biceps"],
-  ["Concentration Curl", "Biceps", "beginner", "3 x 10-12", "45s rest", "biceps"],
-  ["Close-Grip Bench Press", "Triceps", "intermediate", "4 x 8-10", "90s rest", "triceps | chest"],
-  ["Tricep Rope Pushdown", "Triceps", "beginner", "3 x 12-15", "45s rest", "triceps"],
-  ["Overhead Tricep Extension", "Triceps", "beginner", "3 x 10-12", "60s rest", "triceps"],
-  ["Skull Crusher", "Triceps", "intermediate", "3 x 8-10", "75s rest", "triceps"],
-  ["Bench Dip", "Triceps", "beginner", "3 x 12-15", "45s rest", "triceps | chest"],
-  ["Diamond Push-Up", "Triceps", "intermediate", "3 x 10-15", "60s rest", "triceps | chest"],
-  ["Goblet Squat", "Quads", "beginner", "4 x 10-12", "90s rest", "quads | glutes | core"],
-  ["Barbell Back Squat", "Quads", "intermediate", "4 x 6-8", "120s rest", "quads | glutes | core"],
-  ["Leg Press", "Quads", "beginner", "4 x 10-12", "90s rest", "quads | glutes"],
-  ["Walking Lunge", "Quads", "beginner", "3 x 12 each", "60s rest", "quads | glutes"],
-  ["Bulgarian Split Squat", "Quads", "intermediate", "3 x 10 each", "75s rest", "quads | glutes"],
-  ["Leg Extension", "Quads", "beginner", "3 x 12-15", "60s rest", "quads"],
-  ["Front Squat", "Quads", "advanced", "4 x 6-8", "120s rest", "quads | core"],
-  ["Romanian Deadlift", "Hamstrings", "intermediate", "4 x 8-10", "120s rest", "hamstrings | glutes | back"],
-  ["Leg Curl", "Hamstrings", "beginner", "3 x 12-15", "60s rest", "hamstrings"],
-  ["Good Morning", "Hamstrings", "intermediate", "3 x 8-10", "90s rest", "hamstrings | back"],
-  ["Stiff-Leg Deadlift", "Hamstrings", "intermediate", "4 x 8-10", "90s rest", "hamstrings | glutes"],
-  ["Nordic Curl", "Hamstrings", "advanced", "3 x 6-8", "90s rest", "hamstrings"],
-  ["Hip Thrust", "Glutes", "beginner", "4 x 10-12", "90s rest", "glutes | hamstrings"],
-  ["Glute Bridge", "Glutes", "beginner", "3 x 15-20", "45s rest", "glutes"],
-  ["Cable Kickback", "Glutes", "beginner", "3 x 12-15 each", "45s rest", "glutes"],
-  ["Sumo Deadlift", "Glutes", "advanced", "4 x 6-8", "120s rest", "glutes | hamstrings | back"],
-  ["Step-Up", "Glutes", "beginner", "3 x 10 each", "60s rest", "glutes | quads"],
-  ["Plank", "Core", "beginner", "3 x 45s", "45s rest", "core"],
-  ["Hanging Leg Raise", "Core", "intermediate", "3 x 12-15", "60s rest", "core"],
-  ["Cable Woodchopper", "Core", "beginner", "3 x 12 each", "45s rest", "core | shoulders"],
-  ["Russian Twist", "Core", "beginner", "3 x 20", "45s rest", "core"],
-  ["Ab Wheel Rollout", "Core", "advanced", "3 x 8-12", "60s rest", "core | shoulders"],
-  ["Bicycle Crunch", "Core", "beginner", "3 x 20", "45s rest", "core"],
-  ["Standing Calf Raise", "Calves", "beginner", "4 x 12-15", "45s rest", "calves"],
-  ["Seated Calf Raise", "Calves", "beginner", "3 x 15-20", "45s rest", "calves"],
-  ["Single-Leg Calf Raise", "Calves", "intermediate", "3 x 12 each", "45s rest", "calves"],
-  ["Jump Rope", "Calves", "beginner", "3 x 60s", "45s rest", "calves | cardio"],
+  // Chest
+  ["Barbell Bench Press","Chest","intermediate","4 x 6-8","120s rest","chest | triceps | shoulders"],
+  ["Incline Dumbbell Press","Chest","beginner","4 x 8-10","90s rest","chest | shoulders"],
+  ["Push-Up","Chest","beginner","3 x 12-20","60s rest","chest | triceps | core"],
+  ["Cable Chest Fly","Chest","beginner","3 x 12-15","60s rest","chest"],
+  ["Dumbbell Chest Press","Chest","beginner","4 x 8-12","90s rest","chest | triceps"],
+  ["Weighted Dip","Chest","advanced","3 x 6-10","120s rest","chest | triceps"],
+  ["Decline Barbell Press","Chest","intermediate","4 x 8-10","90s rest","chest | triceps"],
+  ["Pec Deck Machine","Chest","beginner","3 x 12-15","60s rest","chest"],
+  // Back
+  ["Barbell Row","Back","intermediate","4 x 8-10","90s rest","back | biceps"],
+  ["Lat Pulldown","Back","beginner","3 x 10-12","75s rest","back | biceps"],
+  ["Pull-Up","Back","intermediate","4 x 6-10","90s rest","back | biceps"],
+  ["Seated Cable Row","Back","beginner","3 x 10-12","75s rest","back | biceps"],
+  ["Single-Arm Dumbbell Row","Back","beginner","3 x 10-12","60s rest","back | biceps"],
+  ["Deadlift","Back","advanced","4 x 5-6","150s rest","back | hamstrings | glutes"],
+  ["T-Bar Row","Back","intermediate","4 x 8-10","90s rest","back | biceps"],
+  // Shoulders
+  ["Standing Shoulder Press","Shoulders","intermediate","4 x 8-10","90s rest","shoulders | triceps"],
+  ["Lateral Raise","Shoulders","beginner","3 x 12-15","45s rest","shoulders"],
+  ["Face Pull","Shoulders","beginner","3 x 15-20","45s rest","shoulders | back"],
+  ["Arnold Press","Shoulders","intermediate","3 x 8-10","75s rest","shoulders | triceps"],
+  ["Front Raise","Shoulders","beginner","3 x 12-15","45s rest","shoulders"],
+  ["Rear Delt Fly","Shoulders","beginner","3 x 12-15","45s rest","shoulders | back"],
+  // Biceps
+  ["Barbell Curl","Biceps","beginner","3 x 8-12","60s rest","biceps"],
+  ["Dumbbell Hammer Curl","Biceps","beginner","3 x 10-12","60s rest","biceps | forearms"],
+  ["Incline Dumbbell Curl","Biceps","intermediate","3 x 10-12","60s rest","biceps"],
+  ["Preacher Curl","Biceps","intermediate","3 x 8-10","60s rest","biceps"],
+  ["Cable Curl","Biceps","beginner","3 x 12-15","45s rest","biceps"],
+  ["Concentration Curl","Biceps","beginner","3 x 10-12","45s rest","biceps"],
+  // Triceps
+  ["Close-Grip Bench Press","Triceps","intermediate","4 x 8-10","90s rest","triceps | chest"],
+  ["Tricep Rope Pushdown","Triceps","beginner","3 x 12-15","45s rest","triceps"],
+  ["Overhead Tricep Extension","Triceps","beginner","3 x 10-12","60s rest","triceps"],
+  ["Skull Crusher","Triceps","intermediate","3 x 8-10","75s rest","triceps"],
+  ["Bench Dip","Triceps","beginner","3 x 12-15","45s rest","triceps | chest"],
+  ["Diamond Push-Up","Triceps","intermediate","3 x 10-15","60s rest","triceps | chest"],
+  // Quads
+  ["Goblet Squat","Quads","beginner","4 x 10-12","90s rest","quads | glutes | core"],
+  ["Barbell Back Squat","Quads","intermediate","4 x 6-8","120s rest","quads | glutes | core"],
+  ["Leg Press","Quads","beginner","4 x 10-12","90s rest","quads | glutes"],
+  ["Walking Lunge","Quads","beginner","3 x 12 each","60s rest","quads | glutes"],
+  ["Bulgarian Split Squat","Quads","intermediate","3 x 10 each","75s rest","quads | glutes"],
+  ["Leg Extension","Quads","beginner","3 x 12-15","60s rest","quads"],
+  ["Front Squat","Quads","advanced","4 x 6-8","120s rest","quads | core"],
+  // Hamstrings
+  ["Romanian Deadlift","Hamstrings","intermediate","4 x 8-10","120s rest","hamstrings | glutes | back"],
+  ["Leg Curl","Hamstrings","beginner","3 x 12-15","60s rest","hamstrings"],
+  ["Good Morning","Hamstrings","intermediate","3 x 8-10","90s rest","hamstrings | back"],
+  ["Stiff-Leg Deadlift","Hamstrings","intermediate","4 x 8-10","90s rest","hamstrings | glutes"],
+  ["Nordic Curl","Hamstrings","advanced","3 x 6-8","90s rest","hamstrings"],
+  // Glutes
+  ["Hip Thrust","Glutes","beginner","4 x 10-12","90s rest","glutes | hamstrings"],
+  ["Glute Bridge","Glutes","beginner","3 x 15-20","45s rest","glutes"],
+  ["Cable Kickback","Glutes","beginner","3 x 12-15 each","45s rest","glutes"],
+  ["Sumo Deadlift","Glutes","advanced","4 x 6-8","120s rest","glutes | hamstrings | back"],
+  ["Step-Up","Glutes","beginner","3 x 10 each","60s rest","glutes | quads"],
+  // Core
+  ["Plank","Core","beginner","3 x 45s","45s rest","core"],
+  ["Hanging Leg Raise","Core","intermediate","3 x 12-15","60s rest","core"],
+  ["Cable Woodchopper","Core","beginner","3 x 12 each","45s rest","core | shoulders"],
+  ["Russian Twist","Core","beginner","3 x 20","45s rest","core"],
+  ["Ab Wheel Rollout","Core","advanced","3 x 8-12","60s rest","core | shoulders"],
+  ["Bicycle Crunch","Core","beginner","3 x 20","45s rest","core"],
+  // Calves
+  ["Standing Calf Raise","Calves","beginner","4 x 12-15","45s rest","calves"],
+  ["Seated Calf Raise","Calves","beginner","3 x 15-20","45s rest","calves"],
+  ["Single-Leg Calf Raise","Calves","intermediate","3 x 12 each","45s rest","calves"],
+  ["Jump Rope","Calves","beginner","3 x 60s","45s rest","calves | cardio"],
+  // Pilates
+  ["The Hundred","Pilates","beginner","1 x 100 pumps","30s rest","core | breath | endurance"],
+  ["Roll-Up","Pilates","beginner","3 x 10","30s rest","core | spine | flexibility"],
+  ["Single Leg Stretch","Pilates","beginner","3 x 10 each","30s rest","core | hip flexors"],
+  ["Double Leg Stretch","Pilates","intermediate","3 x 10","30s rest","core | coordination"],
+  ["Swan Dive","Pilates","intermediate","3 x 8","30s rest","back extension | spine"],
+  ["Side-Lying Leg Lift","Pilates","beginner","3 x 15 each","30s rest","glutes | hips | stability"],
+  ["Pilates Teaser","Pilates","advanced","3 x 8","45s rest","core | hip flexors | balance"],
+  ["Clamshell","Pilates","beginner","3 x 20 each","30s rest","glutes | hips | stability"],
+  ["Spine Stretch Forward","Pilates","beginner","3 x 8","20s rest","spine | hamstrings | posture"],
+  ["Leg Circle","Pilates","beginner","3 x 10 each","30s rest","hips | core | stability"],
+  ["Bridge with Pulse","Pilates","beginner","3 x 15","30s rest","glutes | hamstrings | core"],
+  ["Criss-Cross","Pilates","intermediate","3 x 12 each","30s rest","core | obliques | rotation"],
+  // Yoga
+  ["Sun Salutation A","Yoga","beginner","5 x flow","60s rest","full body | breath | flexibility"],
+  ["Warrior I","Yoga","beginner","3 x 30s each","20s rest","quads | hips | balance"],
+  ["Warrior II","Yoga","beginner","3 x 30s each","20s rest","quads | hips | shoulders"],
+  ["Downward Dog","Yoga","beginner","3 x 45s","20s rest","hamstrings | shoulders | spine"],
+  ["Chair Pose","Yoga","beginner","3 x 30s","30s rest","quads | core | balance"],
+  ["Tree Pose","Yoga","beginner","3 x 30s each","20s rest","balance | hips | core"],
+  ["Boat Pose","Yoga","intermediate","3 x 20s","30s rest","core | hip flexors | balance"],
+  ["Pigeon Pose","Yoga","intermediate","3 x 60s each","20s rest","hips | glutes | flexibility"],
+  ["Crow Pose","Yoga","advanced","3 x 15s","30s rest","core | arms | balance"],
+  ["Standing Forward Fold","Yoga","beginner","3 x 45s","20s rest","hamstrings | spine | flexibility"],
+  // Boxing / Martial Arts / Combat
+  ["Jab-Cross Combo","Combat","beginner","5 x 60s rounds","60s rest","shoulders | core | cardio"],
+  ["Uppercut Drill","Combat","beginner","5 x 30s","45s rest","shoulders | core | legs"],
+  ["Hook Combination","Combat","intermediate","5 x 45s","60s rest","shoulders | core | rotation"],
+  ["Shadow Boxing","Combat","beginner","5 x 2min","60s rest","full body | cardio | coordination"],
+  ["Heavy Bag Rounds","Combat","intermediate","6 x 2min","60s rest","full body | cardio | power"],
+  ["Slip & Counter Drill","Combat","intermediate","4 x 60s","45s rest","core | agility | reaction"],
+  ["Muay Thai Kicks","Combat","intermediate","4 x 60s","60s rest","legs | hips | balance | cardio"],
+  ["Burpee to Push-Up","Combat","beginner","4 x 10","60s rest","full body | cardio | strength"],
+  ["Clinch Work","Combat","advanced","5 x 90s","60s rest","grip | back | core | endurance"],
+  ["Speed Bag","Combat","beginner","4 x 60s","30s rest","shoulders | coordination | rhythm"],
+  // Running / Endurance
+  ["Tempo Run","Running","intermediate","1 x 20-30min","—","cardio | legs | lungs"],
+  ["Interval Sprints","Running","intermediate","8 x 200m","90s rest","legs | cardio | power"],
+  ["Long Slow Run","Running","beginner","1 x 40-60min","—","cardio | endurance | legs"],
+  ["Hill Repeats","Running","intermediate","6 x hill sprint","90s rest","legs | glutes | cardio"],
+  ["Strides","Running","beginner","6 x 80m","60s rest","speed | form | legs"],
+  ["Fartlek Run","Running","intermediate","1 x 30min","—","cardio | legs | mental toughness"],
+  // Calisthenics
+  ["Muscle-Up","Calisthenics","advanced","4 x 5","120s rest","back | chest | triceps | core"],
+  ["Handstand Push-Up","Calisthenics","advanced","4 x 5-8","120s rest","shoulders | triceps | core"],
+  ["L-Sit Hold","Calisthenics","intermediate","4 x 15s","60s rest","core | hip flexors | triceps"],
+  ["Pistol Squat","Calisthenics","intermediate","3 x 8 each","90s rest","quads | glutes | balance"],
+  ["Front Lever Row","Calisthenics","advanced","3 x 5","120s rest","back | core | lats"],
+  ["Human Flag Progression","Calisthenics","advanced","4 x 10s","120s rest","core | shoulders | lats"],
+  ["Tuck Planche","Calisthenics","advanced","4 x 10s","120s rest","chest | shoulders | core"],
+  ["Dips","Calisthenics","beginner","3 x 10-15","60s rest","chest | triceps | shoulders"],
+  // Dance / Gymnastics
+  ["Plie Squat","Dance","beginner","4 x 15","45s rest","quads | glutes | inner thighs"],
+  ["Releve Balance","Dance","beginner","3 x 30s","30s rest","calves | balance | core"],
+  ["Arabesque Hold","Dance","intermediate","3 x 20s each","30s rest","glutes | back | balance"],
+  ["Grand Battement","Dance","beginner","3 x 12 each","30s rest","hip flexors | glutes | flexibility"],
+  ["Core Contraction","Dance","beginner","3 x 15","30s rest","core | posture | control"],
+  // CrossFit / HIIT
+  ["Thruster","Full Body","intermediate","4 x 10","90s rest","quads | shoulders | core | full body"],
+  ["Kettlebell Swing","Full Body","beginner","4 x 15","60s rest","glutes | hamstrings | back | cardio"],
+  ["Box Jump","Full Body","intermediate","4 x 8","90s rest","quads | glutes | calves | power"],
+  ["Burpee","Full Body","beginner","4 x 10","60s rest","full body | cardio"],
+  ["Wall Ball","Full Body","intermediate","4 x 15","75s rest","quads | shoulders | core"],
+  ["Double-Under Jump Rope","Full Body","intermediate","4 x 30","45s rest","calves | coordination | cardio"],
+  ["Sled Push","Full Body","intermediate","4 x 20m","90s rest","quads | glutes | core | cardio"],
+  ["Battle Ropes","Full Body","beginner","4 x 30s","45s rest","shoulders | core | cardio"],
 ];
 
 
@@ -318,25 +394,162 @@ function renderDashboard() {
 }
 
 function weekPlan() {
-  const normal = [
-    ["Monday", "Full Body A", "chest, back, quads, core", "Chest", false],
-    ["Tuesday", "Active Recovery", "Recovery day - stretch, walk, sleep well.", "", true],
-    ["Wednesday", "Full Body B", "shoulders, back, hamstrings, glutes", "Shoulders", false],
-    ["Thursday", "Rest Day", "Recovery day - stretch, walk, sleep well.", "", true],
-    ["Friday", "Full Body C", "chest, biceps, triceps, quads", "Chest", false],
-    ["Saturday", "Conditioning", "hiit full body", "Full Body", false],
-    ["Sunday", "Rest Day", "Recovery day - stretch, walk, sleep well.", "", true],
+  const sports = state.profile.sports || [];
+  const goals  = state.profile.goals  || [];
+  const REST   = (day) => [day, "Rest & Recovery", "Recovery day — stretch, walk, sleep well.", "", true];
+
+  // ── Pilates ──
+  if (sports.includes("Pilates")) {
+    const v = state.workoutVersion % 2;
+    return v ? [
+      ["Monday",    "Pilates Core Flow",      "hundred, roll-up, criss-cross",          "Pilates", false],
+      ["Tuesday",   "Yoga & Stretch",          "sun salutation, pigeon pose, forward fold","Yoga",  false],
+      ["Wednesday", "Pilates Lower Body",      "bridge, clam, leg circle, side leg lift","Pilates", false],
+      REST("Thursday"),
+      ["Friday",    "Pilates Full Body",       "teaser, swan dive, double leg stretch",  "Pilates", false],
+      ["Saturday",  "Active Recovery Yoga",    "warrior I & II, tree pose, downward dog","Yoga",   false],
+      REST("Sunday"),
+    ] : [
+      ["Monday",    "Pilates Fundamentals",    "hundred, single leg stretch, spine stretch","Pilates",false],
+      REST("Tuesday"),
+      ["Wednesday", "Glute & Hip Focus",       "hip thrust, clamshell, glute bridge",    "Glutes", false],
+      ["Thursday",  "Pilates Upper Body",      "plank, push-up, spine stretch forward",  "Pilates",false],
+      REST("Friday"),
+      ["Saturday",  "Full Pilates Session",    "teaser, roll-up, leg circle, criss-cross","Pilates",false],
+      REST("Sunday"),
+    ];
+  }
+
+  // ── Yoga ──
+  if (sports.includes("Yoga")) {
+    const v = state.workoutVersion % 2;
+    return v ? [
+      ["Monday",    "Yoga Flow A",             "sun salutation, warrior I, warrior II",  "Yoga",   false],
+      ["Tuesday",   "Core & Stability",        "boat pose, plank, L-sit, bicycle crunch","Core",   false],
+      ["Wednesday", "Hip Opening Flow",        "pigeon pose, warrior II, leg circle",    "Yoga",   false],
+      REST("Thursday"),
+      ["Friday",    "Yoga Strength",           "crow pose, chair pose, standing fold",   "Yoga",   false],
+      ["Saturday",  "Full Body Stretch",       "downward dog, pigeon, spine stretch",    "Yoga",   false],
+      REST("Sunday"),
+    ] : [
+      ["Monday",    "Morning Yoga",            "sun salutation A, tree pose, warrior I", "Yoga",   false],
+      REST("Tuesday"),
+      ["Wednesday", "Balance & Strength",      "crow pose, boat pose, chair pose",       "Yoga",   false],
+      ["Thursday",  "Flexibility Focus",       "pigeon, forward fold, downward dog",     "Yoga",   false],
+      REST("Friday"),
+      ["Saturday",  "Power Yoga",              "sun salutation, warrior II, crow pose",  "Yoga",   false],
+      REST("Sunday"),
+    ];
+  }
+
+  // ── Boxing / Martial Arts / Combat ──
+  if (sports.some(s => ["Boxing","Kickboxing","Martial Arts","Brazilian Jiu-Jitsu","Wrestling"].includes(s))) {
+    const v = state.workoutVersion % 2;
+    return v ? [
+      ["Monday",    "Striking Fundamentals",   "jab-cross, shadow boxing, heavy bag",   "Combat", false],
+      ["Tuesday",   "Strength & Conditioning", "deadlift, pull-up, core work",           "Back",   false],
+      ["Wednesday", "Combination Drills",      "hook combo, uppercut drill, slip & counter","Combat",false],
+      REST("Thursday"),
+      ["Friday",    "Sparring Prep",           "shadow boxing, heavy bag rounds, speed bag","Combat",false],
+      ["Saturday",  "Cardio & Footwork",       "interval sprints, burpees, jump rope",   "Full Body",false],
+      REST("Sunday"),
+    ] : [
+      ["Monday",    "Boxing Conditioning",     "shadow boxing, heavy bag, burpees",      "Combat", false],
+      ["Tuesday",   "Lower Body Power",        "squat, hip thrust, walking lunge",       "Quads",  false],
+      ["Wednesday", "Technical Drills",        "jab-cross, slip & counter, speed bag",   "Combat", false],
+      REST("Thursday"),
+      ["Friday",    "Full Contact Conditioning","heavy bag rounds, clinch work, kicks",  "Combat", false],
+      ["Saturday",  "Strength Day",            "deadlift, bench press, barbell row",     "Chest",  false],
+      REST("Sunday"),
+    ];
+  }
+
+  // ── Running / Endurance ──
+  if (sports.some(s => ["Running","Trail Running","Sprinting","Triathlon","Cycling"].includes(s)) ||
+      goals.some(g => ["Run a 10K","Build endurance"].includes(g))) {
+    const v = state.workoutVersion % 2;
+    return v ? [
+      ["Monday",    "Easy Run",                "long slow run at conversational pace",   "Running",false],
+      ["Tuesday",   "Strength & Core",         "squat, deadlift, core work",             "Quads",  false],
+      ["Wednesday", "Tempo Run",               "sustained effort 20-30 min tempo",       "Running",false],
+      REST("Thursday"),
+      ["Friday",    "Interval Sprints",        "8 x 200m with recovery jogs",            "Running",false],
+      ["Saturday",  "Long Run",                "easy long run, build base mileage",      "Running",false],
+      REST("Sunday"),
+    ] : [
+      ["Monday",    "Fartlek Session",         "30min varied pace running",              "Running",false],
+      ["Tuesday",   "Hill Repeats",            "6 x hill sprints for power",             "Running",false],
+      ["Wednesday", "Cross-Training",          "cycling or swimming for active recovery","Full Body",false],
+      REST("Thursday"),
+      ["Friday",    "Strides & Speed",         "6 x 80m strides, form focus",            "Running",false],
+      ["Saturday",  "Race Pace Run",           "run at goal race pace for 20-40 min",    "Running",false],
+      REST("Sunday"),
+    ];
+  }
+
+  // ── Calisthenics ──
+  if (sports.includes("Calisthenics")) {
+    const v = state.workoutVersion % 2;
+    return v ? [
+      ["Monday",    "Push Skills",             "handstand push-up, dips, planche tuck", "Calisthenics",false],
+      ["Tuesday",   "Pull Skills",             "muscle-up, front lever row, pull-up",   "Calisthenics",false],
+      ["Wednesday", "Legs & Core",             "pistol squat, L-sit, ab wheel rollout", "Calisthenics",false],
+      REST("Thursday"),
+      ["Friday",    "Skill Practice",          "human flag, handstand, planche",        "Calisthenics",false],
+      ["Saturday",  "Full Body Circuit",       "burpees, dips, pull-up, pistol squat",  "Full Body",false],
+      REST("Sunday"),
+    ] : [
+      ["Monday",    "Upper Push",              "dips, diamond push-up, handstand push-up","Calisthenics",false],
+      REST("Tuesday"),
+      ["Wednesday", "Upper Pull",              "pull-up, muscle-up, front lever row",   "Calisthenics",false],
+      ["Thursday",  "Lower & Core",            "pistol squat, L-sit, bicycle crunch",   "Calisthenics",false],
+      REST("Friday"),
+      ["Saturday",  "Full Skill Day",          "all skills practice, mobility work",    "Calisthenics",false],
+      REST("Sunday"),
+    ];
+  }
+
+  // ── Bodybuilding / Powerlifting / General Strength ──
+  const v = state.workoutVersion % 2;
+  if (goals.some(g => ["Lean bulk","Increase strength while lean","Body recomposition"].includes(g)) ||
+      sports.some(s => ["Bodybuilding","Powerlifting","CrossFit"].includes(s))) {
+    return v ? [
+      ["Monday",    "Chest & Triceps",         "bench press, incline press, dips",       "Chest",  false],
+      ["Tuesday",   "Back & Biceps",           "deadlift, barbell row, pull-up",         "Back",   false],
+      ["Wednesday", "Legs",                    "squat, leg press, romanian deadlift",    "Quads",  false],
+      REST("Thursday"),
+      ["Friday",    "Shoulders & Arms",        "shoulder press, lateral raise, curls",   "Shoulders",false],
+      ["Saturday",  "Full Body & Core",        "compound lifts, core circuit",           "Full Body",false],
+      REST("Sunday"),
+    ] : [
+      ["Monday",    "Upper Strength A",        "bench press, barbell row, shoulder press","Chest", false],
+      ["Tuesday",   "Lower Strength A",        "squat, hip thrust, walking lunge",       "Quads",  false],
+      REST("Wednesday"),
+      ["Thursday",  "Upper Strength B",        "incline press, pull-up, lateral raise",  "Chest",  false],
+      ["Friday",    "Lower Strength B",        "deadlift, leg curl, calf raise",         "Hamstrings",false],
+      ["Saturday",  "Conditioning",            "kettlebell swing, burpee, battle ropes", "Full Body",false],
+      REST("Sunday"),
+    ];
+  }
+
+  // ── Default (general fitness / mobility / return from injury) ──
+  return v ? [
+    ["Monday",    "Full Body A",              "chest, back, quads, core",               "Chest",  false],
+    ["Tuesday",   "Active Recovery",          "Recovery day — stretch, walk, sleep well.","",     true],
+    ["Wednesday", "Full Body B",              "shoulders, back, hamstrings, glutes",     "Shoulders",false],
+    REST("Thursday"),
+    ["Friday",    "Full Body C",              "chest, biceps, triceps, quads",           "Chest",  false],
+    ["Saturday",  "Conditioning",             "hiit full body",                          "Full Body",false],
+    REST("Sunday"),
+  ] : [
+    ["Monday",    "Upper Strength",           "chest, back, shoulders",                  "Chest",  false],
+    ["Tuesday",   "Zone 2 Cardio",            "aerobic base, mobility",                  "Running",false],
+    ["Wednesday", "Lower Strength",           "quads, hamstrings, glutes",               "Quads",  false],
+    REST("Thursday"),
+    ["Friday",    "Full Body Power",          "push, pull, core",                        "Full Body",false],
+    ["Saturday",  "HIIT Conditioning",        "hiit full body",                          "Full Body",false],
+    REST("Sunday"),
   ];
-  const alternate = [
-    ["Monday", "Upper Strength", "chest, back, shoulders", "Chest", false],
-    ["Tuesday", "Zone 2 Cardio", "aerobic base, mobility", "Running", false],
-    ["Wednesday", "Lower Strength", "quads, hamstrings, glutes", "Quads", false],
-    ["Thursday", "Rest Day", "Recovery day - stretch, walk, sleep well.", "", true],
-    ["Friday", "Full Body Power", "push, pull, core", "Full Body", false],
-    ["Saturday", "Boxing Conditioning", "hiit full body", "Combat", false],
-    ["Sunday", "Rest Day", "Recovery day - stretch, walk, sleep well.", "", true],
-  ];
-  return state.workoutVersion % 2 ? alternate : normal;
 }
 
 function renderWorkout() {
@@ -377,7 +590,17 @@ function renderWorkout() {
 }
 
 function renderExercises() {
-  const groups = ["Chest", "Back", "Shoulders", "Biceps", "Triceps", "Quads", "Hamstrings", "Glutes", "Core", "Calves", "Full Body"];
+  // Always show base groups + any sport-specific groups the user cares about
+  const sports = state.profile.sports || [];
+  const baseGroups = ["Chest","Back","Shoulders","Biceps","Triceps","Quads","Hamstrings","Glutes","Core","Calves","Full Body"];
+  const sportGroups = [];
+  if (sports.some(s => ["Pilates"].includes(s))) sportGroups.push("Pilates");
+  if (sports.some(s => ["Yoga"].includes(s))) sportGroups.push("Yoga");
+  if (sports.some(s => ["Boxing","Kickboxing","Martial Arts","Brazilian Jiu-Jitsu","Wrestling"].includes(s))) sportGroups.push("Combat");
+  if (sports.some(s => ["Running","Trail Running","Sprinting","Triathlon"].includes(s))) sportGroups.push("Running");
+  if (sports.some(s => ["Calisthenics"].includes(s))) sportGroups.push("Calisthenics");
+  if (sports.some(s => ["Dance","Gymnastics"].includes(s))) sportGroups.push("Dance");
+  const groups = [...baseGroups, ...sportGroups];
   el("exercise-filters").innerHTML = groups.map((group) => '<button type="button" class="' + (group === exerciseGroup ? "active" : "") + '" data-exercise-filter="' + group + '">' + group + '</button>').join("");
   all("[data-exercise-filter]").forEach((button) => button.addEventListener("click", () => {
     exerciseGroup = button.dataset.exerciseFilter;
@@ -976,9 +1199,21 @@ function decodeGoogleCredential(token) {
 function handleGoogleCredential(response) {
   const payload = decodeGoogleCredential(response.credential);
   const name = (payload && payload.name) || "Google User";
-  state.session = { signedIn: true, name, provider: "google", guest: false };
+  const email = (payload && payload.email) || "";
+  // Check if this Google account has signed in before (keyed by email in state)
+  const existing = loadState();
+  if (existing && existing.session && existing.session.email === email && existing.onboarded) {
+    // Returning Google user - restore their data
+    state = existing;
+    state.session = { signedIn: true, name, email, provider: "google", guest: false };
+  } else {
+    // New Google account - start completely fresh
+    state = defaultState();
+    state.session = { signedIn: true, name, email, provider: "google", guest: false };
+  }
   saveState();
   applyAuthGate();
+  renderAll();
   toast("Welcome, " + name + "!");
 }
 
@@ -1040,9 +1275,19 @@ function events() {
   el("auth-form").addEventListener("submit", (event) => {
     event.preventDefault();
     const name = el("auth-name").value.trim();
-    state.session = { signedIn: true, name, guest: false };
+    const isSignup = el("auth-submit").textContent.trim() === "Create Account";
+    if (isSignup) {
+      // Brand new account - always start completely clean, never leak old profile
+      state = defaultState();
+      state.session = { signedIn: true, name, guest: false };
+    } else {
+      // Returning user - load their saved data, just update the session
+      state = loadState();
+      state.session = { signedIn: true, name: name || state.session.name || "", guest: false };
+    }
     saveState();
     applyAuthGate();
+    renderAll();
     toast("Welcome" + (name ? ", " + name : "") + "!");
   });
   el("auth-guest").addEventListener("click", () => {
