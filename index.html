@@ -25,15 +25,16 @@
           <button class="auth-tab" type="button" role="tab" aria-selected="false" data-auth-tab="signup">Create Account</button>
         </div>
         <form class="auth-form" id="auth-form">
-          <label>Name<input type="text" id="auth-name" name="name" placeholder="Your name" required /></label>
+          <label id="auth-name-label" hidden>Name<input type="text" id="auth-name" name="name" placeholder="Your name" /></label>
           <label>Email<input type="email" id="auth-email" name="email" placeholder="you@example.com" required /></label>
+          <label>Password<input type="password" id="auth-password" name="password" placeholder="At least 6 characters" required minlength="6" /></label>
           <button class="primary-button" type="submit" id="auth-submit">Sign In</button>
         </form>
         <div class="auth-divider"><span>or</span></div>
-        <div id="google-signin-button" class="google-signin-slot"></div>
+        <button type="button" class="outline-button google-oauth-button" id="google-oauth-button">Continue with Google</button>
         <div class="auth-divider"><span>or</span></div>
         <button class="outline-button auth-guest" type="button" id="auth-guest">Continue as Guest</button>
-        <p class="auth-note">Local demo sign-in - your details stay on this device, no account is created on a server.</p>
+        <p class="auth-note" id="auth-mode-note">Real accounts sync across devices via Supabase. Guest mode stays on this tab only and is never saved.</p>
       </div>
     </div>
 
@@ -288,7 +289,7 @@
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <script src="script.js"></script>
   </body>
 </html>

@@ -67,18 +67,20 @@ The Gemini API key must never be committed to the repo or shipped to the browser
 
 That's it - `script.js` already calls `/api/jiya` and `/api/scan-food`, `netlify.toml` redirects those to the functions, and the app will use real Gemini responses automatically once the key is set.
 
-## Google Sign-In Setup (optional)
+## Accounts Setup (Supabase - email/password + Google)
 
-Unlike the Gemini key, a Google OAuth Client ID is a public value - it's safe to commit and put directly in `script.js`. Without it, the "Sign in with Google" button on the sign-in screen just shows a note explaining it isn't configured yet; nothing breaks.
+Real accounts are powered by [Supabase](https://supabase.com) (free tier). Each user's data lives in one row of a Postgres table, protected by Row Level Security, so it follows them to any device. Without a Supabase project configured, the app still runs: the sign-in form explains this and only "Continue as Guest" (local, never saved) works.
 
-1. Go to [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials).
-2. Create an OAuth client ID of type **Web application**.
-3. Under **Authorized JavaScript origins**, add both `http://localhost` (for local testing) and your live Netlify URL, e.g. `https://your-site-name.netlify.app`.
-4. Copy the generated Client ID.
-5. Open `script.js`, find the line `const GOOGLE_CLIENT_ID = "";` near the bottom, and paste your Client ID between the quotes.
-6. Commit and push - the button will now render and work on any origin you listed in step 3.
+The Supabase URL and anon key are safe to put in client code - they are public by design. Security comes from the Row Level Security policies in `supabase/schema.sql`, not from hiding the key. **Never** put the `service_role` key in this project.
 
-This is a local-only demo sign-in, same as the email/guest options: no server verifies the Google token, it's just decoded in the browser to grab a display name.
+1. Create a project at [supabase.com](https://supabase.com).
+2. Open **SQL Editor -> New query**, paste the contents of `supabase/schema.sql`, and run it.
+3. Open **Project Settings -> API**. Copy the **Project URL** and the **anon public** key.
+4. In `script.js`, paste them into `SUPABASE_URL` and `SUPABASE_ANON_KEY` near the top of the auth section.
+5. Open **Authentication -> URL Configuration**. Set **Site URL** to your live Netlify URL and add it (plus `http://localhost:3000` if you test locally) under **Redirect URLs**.
+6. For Google sign-in: open **Authentication -> Providers -> Google**, enable it, and paste your Google OAuth **Client ID and Client Secret**. Copy the **Callback URL** shown there, then in Google Cloud Console (your OAuth client) add it under **Authorized redirect URIs**.
+7. Optional: under **Authentication -> Providers -> Email**, turn off "Confirm email" while testing so sign-ups work instantly.
+8. Commit and push - Netlify redeploys automatically.
 
 ## How `localStorage` Is Used
 

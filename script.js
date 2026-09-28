@@ -247,7 +247,7 @@ const num = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(val
 
 function defaultState() {
   return {
-    session: { signedIn: false, name: "", guest: false },
+    session: { signedIn: false, name: "", guest: false, userId: null },
     onboarded: false,
     theme: "system",
     profile: { ...DEFAULT_PROFILE, sports: [...DEFAULT_PROFILE.sports], goals: [...DEFAULT_PROFILE.goals] },
@@ -331,7 +331,17 @@ function saveState() {
   if (state.session.guest) {
     sessionStorage.setItem(GUEST_STORAGE_KEY, payload);
   } else {
+    // Always keep a local cache too - instant on next load, and a fallback
+    // if the network/Supabase write below fails or is slow.
     localStorage.setItem(STORAGE_KEY, payload);
+    if (supabaseClient && state.session.userId) {
+      supabaseClient
+        .from("profiles_state")
+        .upsert({ user_id: state.session.userId, state, updated_at: new Date().toISOString() })
+        .then(({ error }) => {
+          if (error) console.error("Supabase save failed:", error.message);
+        });
+    }
   }
 }
 
@@ -1246,60 +1256,78 @@ async function analyzeFoodPhoto(file) {
   }
 }
 
-// Fill this in with your own Google OAuth Client ID to enable "Sign in with
-// Google" (see README - it's a public value, safe to commit, not a secret).
-const GOOGLE_CLIENT_ID = "903860660435-kv759pqtnen465hkvmc46vcvg9a71fuc.apps.googleusercontent.com";
+// Fill these in with your own Supabase project's URL and anon/public key to
+// enable real accounts (email/password + Google) that sync across any
+// device. Both values are safe to put in client code - Supabase enforces
+// access with Row Level Security policies on the server, not by hiding this
+// key (see README for setup steps and the required SQL). Without these,
+// only "Continue as Guest" works, and the Sign In form explains why.
+const SUPABASE_URL = "https://xanjnioxtitaukqdvmtd.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhbmpuaW94dGl0YXVrcWR2bXRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2MTcxNTgsImV4cCI6MjEwNjE5MzE1OH0.s01H_KUw-NIQ6MIToSfMeFMv6Rz6MYs1AfrUhVeEMOg";
+let supabaseClient = null;
+if (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase) {
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+}
 
-function decodeGoogleCredential(token) {
-  try {
-    const payload = token.split(".")[1];
-    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const json = decodeURIComponent(
-      atob(base64)
-        .split("")
-        .map((c) => "%" + c.charCodeAt(0).toString(16).padStart(2, "0"))
-        .join("")
-    );
-    return JSON.parse(json);
-  } catch (err) {
+async function loadCloudState(userId) {
+  const { data, error } = await supabaseClient.from("profiles_state").select("state").eq("user_id", userId).maybeSingle();
+  if (error) {
+    console.error("Supabase load failed:", error.message);
     return null;
   }
+  return data ? data.state : null;
 }
 
-function handleGoogleCredential(response) {
-  const payload = decodeGoogleCredential(response.credential);
-  const name = (payload && payload.name) || "Google User";
-  const email = (payload && payload.email) || "";
-  // Check if this Google account has signed in before (keyed by email in state)
-  const existing = loadState();
-  if (existing && existing.session && existing.session.email === email && existing.onboarded) {
-    // Returning Google user - restore their data
-    state = existing;
-    state.session = { signedIn: true, name, email, provider: "google", guest: false };
-  } else {
-    // New Google account - start completely fresh
-    state = defaultState();
-    state.session = { signedIn: true, name, email, provider: "google", guest: false };
-  }
+async function handleSupabaseSession(session) {
+  const user = session.user;
+  const cloud = await loadCloudState(user.id);
+  state = cloud ? mergeState(defaultState(), cloud) : defaultState();
+  state.session = {
+    signedIn: true,
+    guest: false,
+    userId: user.id,
+    name: (user.user_metadata && user.user_metadata.full_name) || user.email,
+    email: user.email,
+    provider: (user.app_metadata && user.app_metadata.provider) || "email",
+  };
   saveState();
-  applyAuthGate();
   renderAll();
-  toast("Welcome, " + name + "!");
+  applyAuthGate();
+  toast("Welcome, " + state.session.name + "!");
 }
 
-function initGoogleSignIn() {
-  const slot = el("google-signin-button");
-  if (!slot) return;
-  if (!GOOGLE_CLIENT_ID) {
-    slot.innerHTML = '<p class="auth-note">Google sign-in isn\'t configured yet - add a Client ID in script.js (see README).</p>';
+function initSupabaseAuth() {
+  const authForm = el("auth-form");
+  const googleButton = el("google-oauth-button");
+  const note = el("auth-mode-note");
+  if (!supabaseClient) {
+    if (note) note.textContent = "Real accounts aren't configured yet - use Continue as Guest, or see README to enable Supabase.";
+    if (authForm) authForm.hidden = true;
+    if (googleButton) googleButton.hidden = true;
     return;
   }
-  if (!window.google || !window.google.accounts || !window.google.accounts.id) {
-    slot.innerHTML = '<p class="auth-note">Google sign-in is unavailable right now - use email or Continue as Guest instead.</p>';
-    return;
-  }
-  window.google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleGoogleCredential });
-  window.google.accounts.id.renderButton(slot, { theme: "outline", size: "large", width: 300 });
+
+  // onAuthStateChange fires once immediately with whatever session already
+  // exists (e.g. a returning visitor, or right after a Google redirect back
+  // to this page) - that single listener covers both "just signed in" and
+  // "already had a session" without a separate getSession() call.
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session) {
+      handleSupabaseSession(session);
+    } else if (event === "SIGNED_OUT") {
+      // localStorage[STORAGE_KEY] is only ever a cache of the signed-in
+      // account's cloud data - clear it here so it can never resurface as a
+      // stale "still signed in" state for the next person on this device.
+      localStorage.removeItem(STORAGE_KEY);
+      state = defaultState();
+      applyAuthGate();
+      renderAll();
+    }
+  });
+
+  googleButton.addEventListener("click", () => {
+    supabaseClient.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.origin } });
+  });
 }
 
 function events() {
@@ -1328,45 +1356,57 @@ function events() {
       // rather than writing it into the persistent slot, so it never leaks into the next
       // person's (or device's) session.
       sessionStorage.removeItem(GUEST_STORAGE_KEY);
-      state = loadState();
-      state.session = { signedIn: false, name: "", guest: false };
+      state.session = { signedIn: false, name: "", guest: false, userId: null };
+      applyAuthGate();
+      renderAll();
+      toast("Guest session ended - nothing from it was saved.");
+    } else if (supabaseClient && state.session.userId) {
+      supabaseClient.auth.signOut(); // triggers the SIGNED_OUT handler in initSupabaseAuth
+      toast("Signed out.");
     } else {
-      state.session = { signedIn: false, name: "", guest: false };
-      saveState();
+      state.session = { signedIn: false, name: "", guest: false, userId: null };
+      applyAuthGate();
+      renderAll();
     }
-    applyAuthGate();
-    renderAll();
-    toast(wasGuest ? "Guest session ended - nothing from it was saved." : "Signed out. Your data stays saved on this device.");
   });
   all("[data-auth-tab]").forEach((button) => button.addEventListener("click", () => {
     all("[data-auth-tab]").forEach((b) => { b.classList.toggle("active", b === button); b.setAttribute("aria-selected", b === button ? "true" : "false"); });
-    el("auth-submit").textContent = button.dataset.authTab === "signup" ? "Create Account" : "Sign In";
+    const isSignup = button.dataset.authTab === "signup";
+    el("auth-submit").textContent = isSignup ? "Create Account" : "Sign In";
+    if (el("auth-name-label")) el("auth-name-label").hidden = !isSignup;
   }));
-  el("auth-form").addEventListener("submit", (event) => {
+  el("auth-form").addEventListener("submit", async (event) => {
     event.preventDefault();
-    const name = el("auth-name").value.trim();
-    const isSignup = el("auth-submit").textContent.trim() === "Create Account";
-    if (isSignup) {
-      // Brand new account - always start completely clean, never leak old profile
-      state = defaultState();
-      state.session = { signedIn: true, name, guest: false };
-    } else {
-      // Returning user - load their saved data, just update the session
-      state = loadState();
-      state.session = { signedIn: true, name: name || state.session.name || "", guest: false };
+    if (!supabaseClient) {
+      toast("Real accounts aren't configured yet - use Continue as Guest, or see README to enable Supabase.");
+      return;
     }
-    saveState();
-    applyAuthGate();
-    renderAll();
-    toast("Welcome" + (name ? ", " + name : "") + "!");
+    const name = el("auth-name").value.trim();
+    const email = el("auth-email").value.trim();
+    const password = el("auth-password").value;
+    const isSignup = el("auth-submit").textContent.trim() === "Create Account";
+    const submitButton = event.target.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
+    const { error } = isSignup
+      ? await supabaseClient.auth.signUp({ email, password, options: { data: { full_name: name } } })
+      : await supabaseClient.auth.signInWithPassword({ email, password });
+    submitButton.disabled = false;
+    if (error) {
+      toast(error.message);
+      return;
+    }
+    // A successful sign-in/sign-up fires onAuthStateChange (see
+    // initSupabaseAuth), which loads the account's data and updates the UI -
+    // nothing more to do here except handle the "confirm your email" case.
+    toast(isSignup ? "Check your email to confirm your account, then sign in." : "Signing in...");
   });
   el("auth-guest").addEventListener("click", () => {
     // Guest mode always starts from a completely clean slate, kept in this tab's
-    // sessionStorage only - it never reads or overwrites the real signed-in account's
-    // saved profile in localStorage, and it disappears when the tab closes.
+    // sessionStorage only - it never reads or overwrites a real signed-in account's
+    // saved profile, and it disappears when the tab closes.
     sessionStorage.removeItem(GUEST_STORAGE_KEY);
     state = defaultState();
-    state.session = { signedIn: true, name: "Guest", guest: true };
+    state.session = { signedIn: true, name: "Guest", guest: true, userId: null };
     saveState();
     applyAuthGate();
     renderAll();
@@ -1552,4 +1592,4 @@ renderAll();
 changePage(window.location.hash.slice(1) || "dashboard", false);
 applyAuthGate();
 applyTheme();
-window.addEventListener("load", initGoogleSignIn);
+initSupabaseAuth();

@@ -2227,14 +2227,8 @@ button:disabled {
   background: var(--line);
 }
 
-.google-signin-slot {
-  display: grid;
-  place-items: center;
-  min-height: 40px;
-}
-
-.google-signin-slot .auth-note {
-  margin: 0;
+.google-oauth-button {
+  width: 100%;
 }
 
 /* Onboarding mode: hide chrome, show only the profile setup wizard */
