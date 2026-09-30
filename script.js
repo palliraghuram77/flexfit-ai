@@ -2,13 +2,13 @@ const STORAGE_KEY = "flexfit-ai-dashboard";
 const GUEST_STORAGE_KEY = "flexfit-ai-dashboard-guest-session";
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DEFAULT_PROFILE = {
-  age: 20,
-  height: 179,
-  weight: 73,
-  targetWeight: 78,
-  level: "beginner",
-  sports: ["Bodybuilding", "Running", "Martial Arts"],
-  goals: ["Lean bulk", "Boxing conditioning", "Body recomposition", "Increase strength while lean", "Run a 10K", "Return from injury"],
+  age: "",
+  height: "",
+  weight: "",
+  targetWeight: "",
+  level: "",
+  sports: [],
+  goals: [],
 };
 const DEFAULT_TARGETS = { calories: 2850, protein: 180, carbs: 350, fat: 80 };
 const SPORT_CHOICES = ["Bodybuilding", "Powerlifting", "CrossFit", "Running", "Trail Running", "Sprinting", "Martial Arts", "Boxing", "Kickboxing", "Brazilian Jiu-Jitsu", "Wrestling", "Cycling", "Mountain Biking", "Swimming", "Triathlon", "Yoga", "Pilates", "Calisthenics", "Rock Climbing", "Hiking", "Football", "Basketball", "Tennis", "Badminton", "Table Tennis", "Volleyball", "Cricket", "Baseball", "Golf", "Rugby", "Hockey", "Skiing", "Snowboarding", "Surfing", "Rowing", "Dance", "Gymnastics", "Skateboarding"];
@@ -1262,8 +1262,8 @@ async function analyzeFoodPhoto(file) {
 // access with Row Level Security policies on the server, not by hiding this
 // key (see README for setup steps and the required SQL). Without these,
 // only "Continue as Guest" works, and the Sign In form explains why.
-const SUPABASE_URL = "https://xanjnioxtitaukqdvmtd.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhbmpuaW94dGl0YXVrcWR2bXRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2MTcxNTgsImV4cCI6MjEwNjE5MzE1OH0.s01H_KUw-NIQ6MIToSfMeFMv6Rz6MYs1AfrUhVeEMOg";
+const SUPABASE_URL = "";
+const SUPABASE_ANON_KEY = "";
 let supabaseClient = null;
 if (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase) {
   supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
