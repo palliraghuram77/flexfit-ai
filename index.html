@@ -132,6 +132,14 @@
               <div id="recommendation-content"><p>Get 3-4 personalised tips based on your profile and recent logs.</p><button class="outline-button" type="button" id="get-recommendations">Get recommendations</button></div>
             </article>
           </div>
+
+          <section class="panel logs-panel" id="logs-panel">
+            <div class="panel-title"><h2>Logs</h2></div>
+            <div class="logs-grid">
+              <div><h3>Food logs</h3><ul class="log-list" id="food-log-list"></ul></div>
+              <div><h3>Weight logs</h3><ul class="log-list" id="weight-log-list"></ul></div>
+            </div>
+          </section>
         </section>
 
         <section class="page" id="workout-page" data-page-view="workout" hidden>
@@ -289,7 +297,7 @@
           <div class="tab-panel" data-panel-group="profile" data-panel="details" hidden>
             <form class="profile-form" id="profile-form">
               <div class="details-grid"><label>Age (years)<input type="number" name="age" min="13" max="100" required /></label><label>Height (cm)<input type="number" name="height" min="120" max="230" required /></label><label>Weight (kg)<input type="number" name="weight" min="30" max="250" step="0.1" required /></label><label>Target weight (kg)<input type="number" name="targetWeight" min="30" max="250" step="0.1" required /></label></div>
-              <fieldset class="level-fieldset"><legend>Fitness level</legend><div class="level-grid"><label><input type="radio" name="level" value="beginner" /><span><b>beginner</b>New to training or returning after a long break</span></label><label><input type="radio" name="level" value="intermediate" /><span><b>intermediate</b>Training consistently for 6+ months</span></label><label><input type="radio" name="level" value="advanced" /><span><b>advanced</b>Years of structured training and solid technique</span></label><label><input type="radio" name="level" value="elite" /><span><b>elite</b>Competing at a high level with periodised training</span></label></div></fieldset>
+              <fieldset class="level-fieldset"><legend>Fitness level</legend><div class="level-grid"><label><input type="radio" name="level" value="beginner" required /><span><b>beginner</b>New to training or returning after a long break</span></label><label><input type="radio" name="level" value="intermediate" /><span><b>intermediate</b>Training consistently for 6+ months</span></label><label><input type="radio" name="level" value="advanced" /><span><b>advanced</b>Years of structured training and solid technique</span></label><label><input type="radio" name="level" value="elite" /><span><b>elite</b>Competing at a high level with periodised training</span></label></div></fieldset>
               <div class="profile-actions"><button class="outline-button" type="button" data-next-profile="goals">Back</button><button class="primary-button" type="submit">Save &amp; Generate AI Targets</button></div>
             </form>
           </div>
@@ -306,6 +314,7 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
     <script src="script.js"></script>
   </body>
 </html>

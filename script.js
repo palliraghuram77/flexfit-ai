@@ -4,8 +4,8 @@ const GUEST_STORAGE_KEY = "flexfit-ai-dashboard-guest-session";
 // Both values are public/safe to commit (like the old GOOGLE_CLIENT_ID) - find them in your
 // Supabase project under Settings -> API. The anon key only grants what your Row Level
 // Security policies allow, never full database access.
-const SUPABASE_URL = "";
-const SUPABASE_ANON_KEY = "";
+const SUPABASE_URL = (window.FLEXFIT_CONFIG && window.FLEXFIT_CONFIG.SUPABASE_URL) || "";
+const SUPABASE_ANON_KEY = (window.FLEXFIT_CONFIG && window.FLEXFIT_CONFIG.SUPABASE_ANON_KEY) || "";
 const sb = (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase)
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
@@ -17,7 +17,7 @@ const DEFAULT_PROFILE = {
   height: "",
   weight: "",
   targetWeight: "",
-  level: "beginner",
+  level: "",
   sports: [],
   goals: [],
 };
@@ -388,11 +388,12 @@ function bars(node, values, labels) {
   const max = Math.max(1, ...values);
   node.innerHTML = values.map((value, index) => {
     const height = value ? Math.max(4, Math.round(value / max * 88)) : 2;
-    return '<div class="chart-column"><i class="chart-bar" style="height:' + height + '%"></i><span>' + labels[index] + '</span></div>';
+    return '<div class="chart-column"><i class="chart-bar" style="height:' + height + '%"></i><span>' + labels[index] + (value ? '<small>' + value + '</small>' : '') + '</span></div>';
   }).join("");
 }
 
 function renderDashboard() {
+  renderLogs();
   const profile = state.profile;
   const target = state.targets;
   const totals = mealTotals(mealsOn(today()));
@@ -1201,14 +1202,14 @@ function renderProgress() {
   }
   bars(el("burn-chart"), calories, labels);
   const entries = state.weightHistory.slice(-7);
-  bars(el("weight-chart"), entries.length ? entries.map((item) => num(item.weight)) : [0, 0, 0, 0, 0, 0, 0], entries.length ? entries.map((item) => item.date.slice(5)) : DAYS);
+  weightLineChart(el("weight-chart"), state.weightHistory.slice(-14), state.profile.targetWeight);
   el("weight-chart-message").hidden = entries.length > 0;
   const consistency = Array.from({ length: 8 }, (_, index) => {
     const end = dateBefore(index * 7);
     const start = dateBefore(index * 7 + 6);
     return state.completedWorkouts.filter((item) => item.date >= start && item.date <= end).length;
   }).reverse();
-  el("consistency-chart").innerHTML = consistency.map((value, index) => '<div><i style="height:' + Math.max(3, Math.min(100, value * 25)) + '%"></i><span>W' + (index + 1) + '</span></div>').join("");
+  el("consistency-chart").innerHTML = consistency.map((value, index) => '<div><i style="height:' + Math.max(3, Math.min(100, value * 25)) + '%"></i><span>W' + (index + 1) + (value ? '<small>' + value + '</small>' : '') + '</span></div>').join("");
   const total = state.cardioSessions.reduce((sum, item) => sum + num(item.calories), 0);
   el("summary-workouts").textContent = state.completedWorkouts.length;
   el("summary-completed").textContent = state.completedWorkouts.length;
@@ -1226,7 +1227,7 @@ function renderProfile() {
   el("selected-sports").textContent = profile.sports.join(", ");
   el("selected-goals").textContent = profile.goals.join(", ");
   el("sport-choices").innerHTML = SPORT_CHOICES.map((item) => '<button type="button" class="choice-button ' + (profile.sports.includes(item) ? "active" : "") + '" data-sport="' + safe(item) + '">' + item + '</button>').join("");
-  el("goal-choices").innerHTML = GOAL_CHOICES.map((item) => '<button type="button" class="choice-button ' + (profile.goals.includes(item) ? "active" : "") + '" data-goal="' + safe(item) + '">' + item + '</button>').join("");
+  el("goal-choices").innerHTML = getRelevantGoals().map((item) => '<button type="button" class="choice-button ' + (profile.goals.includes(item) ? "active" : "") + '" data-goal="' + safe(item) + '">' + item + '</button>').join("");
   all("[data-sport]").forEach((button) => button.addEventListener("click", () => toggleChoice("sports", button.dataset.sport)));
   all("[data-goal]").forEach((button) => button.addEventListener("click", () => toggleChoice("goals", button.dataset.goal)));
   const form = el("profile-form");
@@ -1234,8 +1235,7 @@ function renderProfile() {
   form.elements.height.value = profile.height;
   form.elements.weight.value = profile.weight;
   form.elements.targetWeight.value = profile.targetWeight;
-  const radio = form.querySelector('input[name="level"][value="' + profile.level + '"]');
-  if (radio) radio.checked = true;
+  form.querySelectorAll('input[name="level"]').forEach((radio) => { radio.checked = radio.value === profile.level; });
 }
 
 function toggleChoice(key, value) {
@@ -1249,6 +1249,8 @@ function toggleChoice(key, value) {
   } else {
     state.profile[key] = [...list, value];
   }
+  // Goals only make sense for the chosen sports - drop any that no longer apply.
+  if (key === "sports") state.profile.goals = state.profile.goals.filter((goal) => getRelevantGoals().includes(goal));
   saveState();
   renderProfile();
   renderDashboard();
@@ -1258,7 +1260,7 @@ function calculateTargets(profile) {
   const factor = { beginner: 1.4, intermediate: 1.55, advanced: 1.7, elite: 1.85 };
   const bmr = 10 * num(profile.weight) + 6.25 * num(profile.height) - 5 * num(profile.age) + 5;
   const extra = profile.goals.includes("Lean bulk") ? 220 : profile.goals.includes("Build endurance") ? 100 : 0;
-  const calories = Math.max(1600, Math.round((bmr * factor[profile.level] + extra) / 25) * 25);
+  const calories = Math.max(1600, Math.round((bmr * (factor[profile.level] || 1.4) + extra) / 25) * 25);
   const protein = Math.round(num(profile.weight) * 2.2);
   const fat = Math.round(num(profile.weight) * 0.9);
   return { calories, protein, carbs: Math.max(80, Math.round((calories - protein * 4 - fat * 9) / 4)), fat };
@@ -1372,9 +1374,10 @@ async function imageToScanBase64(file, maxSize = 1024, quality = 0.82) {
 
 function scanFailureReason(status, bodyText) {
   let detail = "";
-  try { detail = (JSON.parse(bodyText).error || "").toString(); } catch (e) { /* not JSON */ }
+  try { const parsed = JSON.parse(bodyText); detail = String(parsed.detail || parsed.error || "").slice(0, 220); } catch (e) { /* not JSON */ }
   if (status === 404) return "The /api/scan-food function wasn't found (404). It isn't deployed here - on Netlify check that netlify/functions/scan-food.js is in the repo, or run the site with `netlify dev` locally.";
-  if (status === 500 || status === 502) return "The scanner function ran but failed (" + status + ")" + (detail ? ": " + detail : ".") + " The most common cause is GEMINI_API_KEY missing in Netlify -> Site configuration -> Environment variables (redeploy after adding it).";
+  if (status === 502) return "Gemini rejected or failed the request" + (detail ? " (" + detail + ")" : "") + ". Open Netlify -> Logs -> Functions -> scan-food for Google's exact message - usually an invalid model name or API key.";
+  if (status === 500) return "The scanner function ran but failed (" + status + ")" + (detail ? ": " + detail : ".") + " The most common cause is GEMINI_API_KEY missing in Netlify -> Site configuration -> Environment variables (redeploy after adding it).";
   if (status === 413) return "The photo was too large for the server (413).";
   if (status === 429) return "Gemini's rate limit was hit (429) - wait a minute and try again.";
   return "The scanner returned status " + status + (detail ? ": " + detail : ".");
@@ -1413,6 +1416,130 @@ async function analyzeFoodPhoto(file) {
     lastScanResult = null;
     return demoScanResult("Couldn't reach /api/scan-food (" + (err && err.message ? err.message : "network error") + "). This happens when the page isn't served by Netlify - e.g. opened as a local file.");
   }
+}
+
+// ── Sport-aware goals ──
+const GENERAL_GOALS = ["Return from injury", "General fitness"];
+const SPORT_GOALS = {
+  "Bodybuilding": ["Lean bulk", "Muscle hypertrophy", "Cut and stay muscular", "Body recomposition", "Fix weak points and symmetry", "Contest prep"],
+  "Powerlifting": ["Increase strength while lean", "Hit a squat/bench/deadlift PR", "Peak for a meet", "Lean bulk", "Improve lifting technique"],
+  "CrossFit": ["Improve WOD performance", "Build work capacity", "Increase strength while lean", "Master gymnastics skills"],
+  "Running": ["Run a 5K", "Run a 10K", "Run a half marathon", "Run a marathon", "Build endurance", "Improve running speed"],
+  "Trail Running": ["Run a trail race", "Build hill and climbing endurance", "Build endurance"],
+  "Sprinting": ["Improve sprint speed", "Build explosive power", "Improve acceleration"],
+  "Boxing": ["Boxing conditioning", "Improve footwork and speed", "Build fight endurance", "Make weight"],
+  "Kickboxing": ["Build fight endurance", "Improve kick power", "Make weight"],
+  "Martial Arts": ["Build fight endurance", "Improve flexibility and mobility", "Make weight"],
+  "Brazilian Jiu-Jitsu": ["Build grappling endurance", "Improve mobility", "Make weight"],
+  "Wrestling": ["Build grappling endurance", "Increase strength while lean", "Make weight"],
+  "Cycling": ["Build endurance", "Improve cycling power", "Complete a long ride"],
+  "Mountain Biking": ["Build endurance", "Improve leg power", "Improve balance and core strength"],
+  "Swimming": ["Build swim endurance", "Improve stroke technique", "Improve swim speed"],
+  "Triathlon": ["Complete a triathlon", "Build endurance", "Improve transitions and pacing"],
+  "Yoga": ["Improve mobility", "Build core strength", "Reduce stress", "Improve posture"],
+  "Pilates": ["Build core strength", "Improve posture", "Improve mobility"],
+  "Calisthenics": ["Master pull-ups and muscle-ups", "Build bodyweight strength", "Learn handstand skills", "Body recomposition"],
+  "Rock Climbing": ["Build finger and grip strength", "Improve climbing endurance", "Improve mobility"],
+  "Hiking": ["Build endurance", "Prepare for a trek", "Strengthen legs and core"],
+};
+const FALLBACK_SPORT_GOALS = ["Improve sport performance", "Build endurance", "Increase strength while lean", "Improve mobility"];
+
+function getRelevantGoals() {
+  const goals = [];
+  state.profile.sports.forEach((sport) => (SPORT_GOALS[sport] || FALLBACK_SPORT_GOALS).forEach((goal) => { if (!goals.includes(goal)) goals.push(goal); }));
+  GENERAL_GOALS.forEach((goal) => { if (!goals.includes(goal)) goals.push(goal); });
+  return goals;
+}
+
+function resetScanner() {
+  if (typeof uploadUrl !== "undefined" && uploadUrl) { URL.revokeObjectURL(uploadUrl); uploadUrl = null; }
+  lastScanResult = null;
+  const input = el("food-upload"); if (input) input.value = "";
+  const preview = el("scan-preview"); if (preview) preview.textContent = "Snap or upload a photo of your plate - every ingredient is measured separately.";
+  const result = el("scan-result"); if (result) { result.hidden = true; result.innerHTML = ""; }
+  const button = el("scan-food"); if (button) button.disabled = true;
+}
+
+// ── Charts ──
+function weightLineChart(node, entries, target) {
+  if (!entries.length) { node.innerHTML = ""; return; }
+  const W = 640, H = 280, L = 52, R = 24, T = 26, B = 42;
+  const values = entries.map((item) => num(item.weight));
+  const goal = num(target, 0);
+  const pool = goal ? [...values, goal] : values;
+  let lo = Math.min(...pool), hi = Math.max(...pool);
+  if (hi - lo < 2) { lo -= 1.5; hi += 1.5; } else { const pad = (hi - lo) * 0.15; lo -= pad; hi += pad; }
+  const x = (i) => entries.length === 1 ? L + (W - L - R) / 2 : L + i * (W - L - R) / (entries.length - 1);
+  const y = (v) => T + (hi - v) / (hi - lo) * (H - T - B);
+  const muted = 'style="fill:var(--muted);font-size:11px"';
+  let svg = '<svg class="weight-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Weight history line chart">';
+  for (let k = 0; k <= 4; k += 1) {
+    const v = lo + (hi - lo) * k / 4;
+    svg += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '" style="stroke:var(--line)"/><text x="' + (L - 8) + '" y="' + (y(v) + 4) + '" text-anchor="end" ' + muted + '>' + v.toFixed(1) + '</text>';
+  }
+  if (goal) svg += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(goal) + '" y2="' + y(goal) + '" style="stroke:var(--accent);stroke-dasharray:6 5"/><text x="' + (W - R) + '" y="' + (y(goal) - 6) + '" text-anchor="end" style="fill:var(--accent);font-size:11px;font-weight:700">Target ' + goal + ' kg</text>';
+  const pts = values.map((v, i) => x(i) + ',' + y(v));
+  if (entries.length > 1) svg += '<polyline points="' + pts.join(' ') + '" fill="none" style="stroke:var(--accent)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>';
+  const step = Math.ceil(entries.length / 7);
+  values.forEach((v, i) => {
+    svg += '<circle cx="' + x(i) + '" cy="' + y(v) + '" r="5" style="fill:var(--accent)"><title>' + entries[i].date + ': ' + v + ' kg</title></circle>';
+    if (entries.length <= 10 || i === entries.length - 1) svg += '<text x="' + x(i) + '" y="' + (y(v) - 11) + '" text-anchor="middle" style="fill:var(--text);font-size:12px;font-weight:700">' + v + '</text>';
+    if (i % step === 0 || i === entries.length - 1) svg += '<text x="' + x(i) + '" y="' + (H - 14) + '" text-anchor="middle" ' + muted + '>' + entries[i].date.slice(5) + '</text>';
+  });
+  node.innerHTML = svg + '</svg>';
+}
+
+function renderLogs() {
+  const foodList = el("food-log-list"), weightList = el("weight-log-list");
+  if (!foodList || !weightList) return;
+  const meals = state.meals.slice(-8).reverse();
+  foodList.innerHTML = meals.length ? meals.map((meal) => '<li><span>' + safe(meal.name) + '<small>' + safe(meal.date) + ' - P ' + num(meal.protein) + 'g C ' + num(meal.carbs) + 'g F ' + num(meal.fat) + 'g</small></span><strong>' + num(meal.calories) + ' kcal</strong></li>').join("") : '<li class="log-empty">No meals logged yet.</li>';
+  const weights = state.weightHistory.slice(-8);
+  weightList.innerHTML = weights.length ? weights.map((entry, i) => {
+    const prev = i > 0 ? weights[i - 1].weight : (state.weightHistory.length > weights.length ? state.weightHistory[state.weightHistory.length - weights.length - 1].weight : null);
+    const diff = prev === null ? "" : (num(entry.weight) - num(prev) > 0 ? "+" : "") + (num(entry.weight) - num(prev)).toFixed(1) + " kg";
+    return '<li><span>' + safe(entry.date) + '<small>' + diff + '</small></span><strong>' + num(entry.weight) + ' kg</strong></li>';
+  }).reverse().join("") : '<li class="log-empty">No weight logged yet.</li>';
+}
+
+// ── Nutrition AI: per-100g [kcal, protein, carbs, fat, type, usual portion g] ──
+const NUTRITION_DB = {
+  chicken: [165, 31, 0, 3.6, "p", 150], egg: [143, 13, 1, 10, "p", 120], soya: [120, 18, 10, 0.5, "p", 120], soy: [120, 18, 10, 0.5, "p", 120],
+  paneer: [265, 18, 1.2, 20, "p", 100], tofu: [76, 8, 2, 4.8, "p", 150], fish: [130, 22, 0, 4, "p", 150], tuna: [116, 26, 0, 1, "p", 120],
+  salmon: [208, 20, 0, 13, "p", 140], beef: [250, 26, 0, 15, "p", 130], mutton: [250, 25, 0, 17, "p", 130], dal: [116, 9, 20, 0.4, "p", 180],
+  lentil: [116, 9, 20, 0.4, "p", 180], chickpea: [164, 9, 27, 2.6, "p", 150], rajma: [127, 9, 23, 0.5, "p", 150], beans: [127, 9, 23, 0.5, "p", 150],
+  curd: [61, 3.5, 4.7, 3.3, "p", 150], yogurt: [61, 3.5, 4.7, 3.3, "p", 150], milk: [61, 3.2, 4.8, 3.3, "p", 200], whey: [380, 78, 8, 6, "p", 30],
+  rice: [130, 2.7, 28, 0.3, "c", 180], roti: [297, 9, 50, 7, "c", 80], chapati: [297, 9, 50, 7, "c", 80], bread: [265, 9, 49, 3.2, "c", 60],
+  oats: [389, 17, 66, 7, "c", 50], potato: [77, 2, 17, 0.1, "c", 200], pasta: [158, 6, 31, 1, "c", 180], noodle: [138, 4.5, 25, 2, "c", 180],
+  quinoa: [120, 4.4, 21, 1.9, "c", 180], banana: [89, 1.1, 23, 0.3, "c", 100], apple: [52, 0.3, 14, 0.2, "c", 150],
+  broccoli: [34, 2.8, 7, 0.4, "v", 120], spinach: [23, 2.9, 3.6, 0.4, "v", 100], tomato: [18, 0.9, 3.9, 0.2, "v", 100], onion: [40, 1.1, 9, 0.1, "v", 60],
+  carrot: [41, 0.9, 10, 0.2, "v", 100], cucumber: [15, 0.7, 3.6, 0.1, "v", 100], capsicum: [31, 1, 6, 0.3, "v", 100], pepper: [31, 1, 6, 0.3, "v", 100],
+  cabbage: [25, 1.3, 6, 0.1, "v", 100], peas: [81, 5, 14, 0.4, "v", 100], mushroom: [22, 3.1, 3.3, 0.3, "v", 100],
+  "peanut butter": [588, 25, 20, 50, "f", 20], almond: [579, 21, 22, 50, "f", 25], nuts: [600, 18, 20, 52, "f", 25], cheese: [402, 25, 1.3, 33, "f", 30],
+  oil: [884, 0, 0, 100, "f", 10], ghee: [900, 0, 0, 100, "f", 10], butter: [717, 0.9, 0.1, 81, "f", 10],
+};
+
+function buildMealIdeas(ingredients) {
+  const parsed = ingredients.map((name) => {
+    const key = Object.keys(NUTRITION_DB).sort((a, b) => b.length - a.length).find((k) => name.toLowerCase().includes(k));
+    return key ? { name, data: NUTRITION_DB[key], estimated: false } : { name, data: [100, 3, 15, 3, "o", 80], estimated: true };
+  });
+  const templates = [
+    { name: "High-protein power bowl", mult: { p: 1.3, c: 1, v: 1, f: 1, o: 1 }, how: "Build a bowl: carbs at the base, protein on top, finish with veg and a little fat." },
+    { name: "Quick one-pan stir-fry", mult: { p: 1, c: 0.7, v: 1.5, f: 0.7, o: 1 }, how: "Heat a pan, cook the protein first, add veg for a few minutes, then toss with the carbs." },
+    { name: "Light and lean plate", mult: { p: 1, c: 0.5, v: 1.7, f: 0.4, o: 0.8 }, how: "Keep it light: a lean protein, a big portion of veg and just a small carb side." },
+    { name: "Hearty recovery meal", mult: { p: 1.1, c: 1.4, v: 1, f: 1, o: 1 }, how: "A bigger carb portion to refuel after training, with protein and veg alongside." },
+  ];
+  return templates.map((template) => {
+    let cal = 0, p = 0, c = 0, f = 0;
+    const items = parsed.map((item) => {
+      const [k, pr, cb, ft, type, portion] = item.data;
+      const grams = Math.max(10, Math.round(portion * (template.mult[type] || 1) / 5) * 5);
+      cal += k * grams / 100; p += pr * grams / 100; c += cb * grams / 100; f += ft * grams / 100;
+      return item.name + " " + grams + "g";
+    });
+    return { name: template.name, how: template.how, items: items.join(", "), cal: Math.round(cal), p: Math.round(p), c: Math.round(c), f: Math.round(f), estimated: parsed.some((item) => item.estimated) };
+  });
 }
 
 // ── Sign-up password helper ──
@@ -1507,6 +1634,8 @@ function events() {
       await sb.auth.signOut(); // clears Supabase's own session storage on this device
     }
     state.session = { signedIn: false, name: "", guest: false };
+    state = defaultState();
+    resetScanner();
     applyAuthGate();
     renderAll();
     toast(wasGuest ? "Guest session ended - nothing from it was saved." : "Signed out. Your data stays saved in your account.");
@@ -1672,16 +1801,19 @@ function events() {
     event.preventDefault();
     const input = el("ingredient-input");
     const value = input.value.trim();
-    if (value && !state.ingredients.includes(value)) {
-      state.ingredients.push(value);
+    if (value) {
+      value.split(/[,;\n]+/).map((part) => part.trim()).filter(Boolean).forEach((part) => {
+        if (!state.ingredients.some((item) => item.toLowerCase() === part.toLowerCase())) state.ingredients.push(part);
+      });
       saveState();
       renderIngredients();
     }
     input.value = "";
   });
   el("generate-ai-meals").addEventListener("click", () => {
-    const foods = state.ingredients.length ? state.ingredients.join(", ") : "your pantry ingredients";
-    el("ai-meal-results").innerHTML = '<div><strong>Quick bowl</strong>Build a high-protein bowl with ' + safe(foods) + ' and a measured carb base.</div><div><strong>Recovery plate</strong>Pair ' + safe(foods) + " with vegetables, a protein source and olive oil.</div>";
+    el("ai-meal-results").innerHTML = state.ingredients.length
+      ? buildMealIdeas(state.ingredients).map((meal) => '<div><strong>' + safe(meal.name) + '</strong>' + safe(meal.how) + '<span class="ai-meal-macros">' + safe(meal.items) + '<br><b>' + meal.cal + ' kcal</b> - P ' + meal.p + 'g - C ' + meal.c + 'g - F ' + meal.f + 'g' + (meal.estimated ? ' (some items estimated)' : '') + '</span></div>').join("")
+      : "<div><strong>Add ingredients first</strong>Type what you have (e.g. chicken, rice, eggs) and press +.</div>";
   });
   el("cardio-start-btn").addEventListener("click", startGpsSession);
   el("cardio-pause-btn").addEventListener("click", pauseGpsSession);
@@ -1721,6 +1853,9 @@ function events() {
   });
   el("profile-form").addEventListener("submit", (event) => {
     event.preventDefault();
+    if (!state.profile.sports.length) { toast("Pick at least one sport first."); changeTab("profile", "sports"); return; }
+    if (!state.profile.goals.length) { toast("Pick at least one goal next."); changeTab("profile", "goals"); return; }
+    if (!new FormData(event.currentTarget).get("level")) { toast("Choose your fitness level."); return; }
     const data = new FormData(event.currentTarget);
     state.profile = {
       ...state.profile,
@@ -1773,12 +1908,15 @@ function applyAuthGate() {
     authScreen.hidden = false;
     shell.hidden = true;
     document.body.classList.remove("onboarding-mode");
+    resetScanner();
+    el("auth-form").reset();
     return;
   }
   authScreen.hidden = true;
   shell.hidden = false;
   if (!state.onboarded) {
     document.body.classList.add("onboarding-mode");
+    changeTab("profile", "sports"); // always start onboarding at step 1
     el("profile-heading-title").textContent = "Welcome to FlexFit AI" + (state.session.name ? ", " + state.session.name : "");
     el("profile-heading-copy").textContent = "Let's set up your profile first - Jiya uses it to calculate your daily targets.";
     el("profile-target-panel").hidden = true;

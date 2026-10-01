@@ -4,7 +4,7 @@
 //   POST /api/jiya  { message, profile, targets, history: [{role, text}] }
 //   -> 200 { reply: string }
 
-const MODEL = "gemini-3.6-flash";
+const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/" + MODEL + ":generateContent";
 
 exports.handler = async (event) => {
@@ -62,7 +62,7 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: systemPrompt }] },
         contents,
-        generationConfig: { maxOutputTokens: 1024, temperature: 0.7, thinkingConfig: { thinkingLevel: "low" } },
+        generationConfig: { maxOutputTokens: 1024, temperature: 0.7, thinkingConfig: MODEL.startsWith("gemini-3") ? { thinkingLevel: "low" } : { thinkingBudget: 0 } },
       }),
     });
 
