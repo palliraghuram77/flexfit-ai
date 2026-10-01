@@ -27,14 +27,26 @@
         <form class="auth-form" id="auth-form">
           <label id="auth-name-label" hidden>Name<input type="text" id="auth-name" name="name" placeholder="Your name" /></label>
           <label>Email<input type="email" id="auth-email" name="email" placeholder="you@example.com" required /></label>
-          <label>Password<input type="password" id="auth-password" name="password" placeholder="At least 6 characters" required minlength="6" /></label>
+          <label>Password<input type="password" id="auth-password" name="password" placeholder="Your password" autocomplete="current-password" required /></label>
+          <div class="pw-helper" id="pw-helper" hidden>
+            <div class="pw-meter" aria-hidden="true"><span class="pw-meter-bar" id="pw-meter-bar"></span></div>
+            <p class="pw-strength-label" id="pw-strength-label" aria-live="polite">Password strength: enter a password</p>
+            <ul class="pw-checklist" id="pw-checklist" aria-label="Password requirements">
+              <li data-rule="length">At least 8 characters</li>
+              <li data-rule="case">Upper and lower case letters</li>
+              <li data-rule="number">At least one number</li>
+              <li data-rule="symbol">At least one symbol (e.g. ! ? #)</li>
+            </ul>
+          </div>
+          <label id="auth-confirm-label" hidden>Confirm password<input type="password" id="auth-confirm" name="confirm" placeholder="Re-enter your password" autocomplete="new-password" /></label>
+          <p class="pw-match" id="pw-match" aria-live="polite" hidden></p>
           <button class="primary-button" type="submit" id="auth-submit">Sign In</button>
         </form>
         <div class="auth-divider"><span>or</span></div>
-        <button type="button" class="outline-button google-oauth-button" id="google-oauth-button">Continue with Google</button>
+        <button type="button" id="google-signin-button" class="outline-button">Continue with Google</button>
         <div class="auth-divider"><span>or</span></div>
         <button class="outline-button auth-guest" type="button" id="auth-guest">Continue as Guest</button>
-        <p class="auth-note" id="auth-mode-note">Real accounts sync across devices via Supabase. Guest mode stays on this tab only and is never saved.</p>
+        <p class="auth-note" id="auth-supabase-note">Accounts and your data are stored securely in Supabase - your password never leaves it in plain text, and only you can read your own data.</p>
       </div>
     </div>
 
@@ -133,7 +145,11 @@
             <div class="week-grid" id="week-grid"></div>
           </div>
           <div class="tab-panel" data-panel-group="workout" data-panel="library" hidden>
-            <div class="library-tools">
+            <div class="day-view-banner" id="day-view-banner" hidden>
+              <p>Showing exercises for <strong id="day-view-label"></strong></p>
+              <button class="outline-button" type="button" id="day-view-exit">← Back to full library</button>
+            </div>
+            <div class="library-tools" id="library-tools">
               <label class="search-field"><span class="sr-only">Search exercises</span><input type="search" id="exercise-search" placeholder="Search exercises..." /></label>
               <div class="filter-row" id="exercise-filters" aria-label="Exercise muscle group filters"></div>
             </div>
@@ -273,7 +289,7 @@
           <div class="tab-panel" data-panel-group="profile" data-panel="details" hidden>
             <form class="profile-form" id="profile-form">
               <div class="details-grid"><label>Age (years)<input type="number" name="age" min="13" max="100" required /></label><label>Height (cm)<input type="number" name="height" min="120" max="230" required /></label><label>Weight (kg)<input type="number" name="weight" min="30" max="250" step="0.1" required /></label><label>Target weight (kg)<input type="number" name="targetWeight" min="30" max="250" step="0.1" required /></label></div>
-              <fieldset class="level-fieldset"><legend>Fitness level</legend><div class="level-grid"><label><input type="radio" name="level" value="beginner" required /><span><b>beginner</b>New to training or returning after a long break</span></label><label><input type="radio" name="level" value="intermediate" required /><span><b>intermediate</b>Training consistently for 6+ months</span></label><label><input type="radio" name="level" value="advanced" required /><span><b>advanced</b>Years of structured training and solid technique</span></label><label><input type="radio" name="level" value="elite" required /><span><b>elite</b>Competing at a high level with periodised training</span></label></div></fieldset>
+              <fieldset class="level-fieldset"><legend>Fitness level</legend><div class="level-grid"><label><input type="radio" name="level" value="beginner" /><span><b>beginner</b>New to training or returning after a long break</span></label><label><input type="radio" name="level" value="intermediate" /><span><b>intermediate</b>Training consistently for 6+ months</span></label><label><input type="radio" name="level" value="advanced" /><span><b>advanced</b>Years of structured training and solid technique</span></label><label><input type="radio" name="level" value="elite" /><span><b>elite</b>Competing at a high level with periodised training</span></label></div></fieldset>
               <div class="profile-actions"><button class="outline-button" type="button" data-next-profile="goals">Back</button><button class="primary-button" type="submit">Save &amp; Generate AI Targets</button></div>
             </form>
           </div>
@@ -289,7 +305,7 @@
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="script.js"></script>
   </body>
 </html>

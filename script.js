@@ -1,79 +1,29 @@
-const STORAGE_KEY = "flexfit-ai-dashboard";
 const GUEST_STORAGE_KEY = "flexfit-ai-dashboard-guest-session";
+
+// --- Supabase setup ---
+// Both values are public/safe to commit (like the old GOOGLE_CLIENT_ID) - find them in your
+// Supabase project under Settings -> API. The anon key only grants what your Row Level
+// Security policies allow, never full database access.
+const SUPABASE_URL = "";
+const SUPABASE_ANON_KEY = "";
+const sb = (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase)
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+// A brand new account must start completely blank - no pre-picked sports/goals/numbers.
+// "beginner" is the only exception, since the level picker needs some starting radio value.
 const DEFAULT_PROFILE = {
   age: "",
   height: "",
   weight: "",
   targetWeight: "",
-  level: "",
+  level: "beginner",
   sports: [],
   goals: [],
 };
 const DEFAULT_TARGETS = { calories: 2850, protein: 180, carbs: 350, fat: 80 };
 const SPORT_CHOICES = ["Bodybuilding", "Powerlifting", "CrossFit", "Running", "Trail Running", "Sprinting", "Martial Arts", "Boxing", "Kickboxing", "Brazilian Jiu-Jitsu", "Wrestling", "Cycling", "Mountain Biking", "Swimming", "Triathlon", "Yoga", "Pilates", "Calisthenics", "Rock Climbing", "Hiking", "Football", "Basketball", "Tennis", "Badminton", "Table Tennis", "Volleyball", "Cricket", "Baseball", "Golf", "Rugby", "Hockey", "Skiing", "Snowboarding", "Surfing", "Rowing", "Dance", "Gymnastics", "Skateboarding"];
-// Fallback list shown when no sport is selected yet.
 const GOAL_CHOICES = ["Lean bulk", "Boxing conditioning", "Body recomposition", "Increase strength while lean", "Run a 10K", "Return from injury", "Build endurance", "Improve mobility", "General fitness"];
-// Goals shown on every profile regardless of sport selection.
-const UNIVERSAL_GOALS = ["General fitness", "Return from injury"];
-// Per-sport relevant goals - selecting a sport swaps the goal list to match it.
-const SPORT_GOALS = {
-  "Bodybuilding": ["Lean bulk", "Body recomposition", "Increase strength while lean", "Build muscle mass", "Improve muscle symmetry", "Contest prep"],
-  "Powerlifting": ["Increase strength while lean", "Improve 1-rep max", "Build muscle mass", "Body recomposition"],
-  "CrossFit": ["Build endurance", "Increase strength while lean", "Body recomposition", "Improve mobility"],
-  "Running": ["Run a 10K", "Run a half marathon", "Run a marathon", "Improve pace", "Build endurance"],
-  "Trail Running": ["Build endurance", "Improve pace", "Run a 10K", "Improve mobility"],
-  "Sprinting": ["Improve speed", "Build explosive power", "Increase strength while lean"],
-  "Martial Arts": ["Boxing conditioning", "Improve mobility", "Build endurance", "Increase strength while lean"],
-  "Boxing": ["Boxing conditioning", "Improve speed", "Build endurance", "Increase strength while lean"],
-  "Kickboxing": ["Boxing conditioning", "Build endurance", "Improve mobility", "Increase strength while lean"],
-  "Brazilian Jiu-Jitsu": ["Build endurance", "Improve mobility", "Increase strength while lean"],
-  "Wrestling": ["Increase strength while lean", "Build endurance", "Improve mobility"],
-  "Cycling": ["Build endurance", "Improve pace", "Body recomposition"],
-  "Mountain Biking": ["Build endurance", "Improve mobility"],
-  "Swimming": ["Build endurance", "Improve pace", "Body recomposition"],
-  "Triathlon": ["Build endurance", "Improve pace", "Run a 10K"],
-  "Yoga": ["Improve mobility", "Improve flexibility", "Reduce stress"],
-  "Pilates": ["Improve mobility", "Improve core strength", "Body recomposition"],
-  "Calisthenics": ["Build muscle mass", "Increase strength while lean", "Improve mobility", "Body recomposition"],
-  "Rock Climbing": ["Increase strength while lean", "Improve mobility", "Build endurance"],
-  "Hiking": ["Build endurance", "Improve mobility"],
-  "Football": ["Build endurance", "Increase strength while lean", "Improve speed"],
-  "Basketball": ["Build endurance", "Improve speed", "Increase strength while lean"],
-  "Tennis": ["Improve speed", "Build endurance", "Increase strength while lean"],
-  "Badminton": ["Improve speed", "Build endurance"],
-  "Table Tennis": ["Improve speed"],
-  "Volleyball": ["Build explosive power", "Improve speed", "Build endurance"],
-  "Cricket": ["Build endurance", "Increase strength while lean"],
-  "Baseball": ["Increase strength while lean", "Improve speed"],
-  "Golf": ["Improve mobility", "Increase strength while lean"],
-  "Rugby": ["Increase strength while lean", "Build endurance", "Build explosive power"],
-  "Hockey": ["Build endurance", "Increase strength while lean", "Improve speed"],
-  "Skiing": ["Increase strength while lean", "Improve mobility", "Build endurance"],
-  "Snowboarding": ["Improve mobility", "Build explosive power"],
-  "Surfing": ["Improve mobility", "Build endurance"],
-  "Rowing": ["Build endurance", "Increase strength while lean"],
-  "Dance": ["Improve mobility", "Build endurance"],
-  "Gymnastics": ["Increase strength while lean", "Improve mobility", "Build explosive power"],
-  "Skateboarding": ["Improve mobility", "Build explosive power"],
-};
-
-// Returns the goal list relevant to the currently selected sport(s).
-// No sports picked yet -> fall back to the full general list.
-function getRelevantGoals(sports) {
-  if (!sports || sports.length === 0) return GOAL_CHOICES;
-  const ordered = [];
-  const seen = new Set();
-  const addGoal = (goal) => {
-    if (!seen.has(goal)) {
-      seen.add(goal);
-      ordered.push(goal);
-    }
-  };
-  sports.forEach((sport) => (SPORT_GOALS[sport] || []).forEach(addGoal));
-  UNIVERSAL_GOALS.forEach(addGoal);
-  return ordered;
-}
 const EXERCISES = [
   // Chest
   ["Barbell Bench Press","Chest","intermediate","4 x 6-8","120s rest","chest | triceps | shoulders"],
@@ -214,7 +164,7 @@ const EXERCISES = [
 ];
 
 
-let state = loadState();
+let state = defaultState();
 let exerciseGroup = "Chest";
 // ── Strava-style GPS cardio tracker state ──
 let cardioSeconds = 0;
@@ -247,7 +197,7 @@ const num = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(val
 
 function defaultState() {
   return {
-    session: { signedIn: false, name: "", guest: false, userId: null },
+    session: { signedIn: false, name: "", guest: false },
     onboarded: false,
     theme: "system",
     profile: { ...DEFAULT_PROFILE, sports: [...DEFAULT_PROFILE.sports], goals: [...DEFAULT_PROFILE.goals] },
@@ -313,36 +263,57 @@ function mergeState(fallback, saved) {
   return merged;
 }
 
-function loadState() {
-  const fallback = defaultState();
-  try {
-    const guestRaw = sessionStorage.getItem(GUEST_STORAGE_KEY);
-    if (guestRaw) return mergeState(fallback, JSON.parse(guestRaw));
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return fallback;
-    return mergeState(fallback, JSON.parse(raw));
-  } catch {
-    return fallback;
-  }
+// Merges a row loaded from Supabase (or nothing, for a brand new user) into a fresh
+// defaultState() and returns the current signed-in Supabase user as a session object.
+function sessionFromSupabaseUser(user) {
+  const meta = user.user_metadata || {};
+  return {
+    signedIn: true,
+    name: meta.name || meta.full_name || (user.email ? user.email.split("@")[0] : "there"),
+    email: user.email || "",
+    guest: false,
+    provider: (user.app_metadata && user.app_metadata.provider) || "email",
+    userId: user.id,
+  };
 }
 
-function saveState() {
-  const payload = JSON.stringify(state);
-  if (state.session.guest) {
-    sessionStorage.setItem(GUEST_STORAGE_KEY, payload);
-  } else {
-    // Always keep a local cache too - instant on next load, and a fallback
-    // if the network/Supabase write below fails or is slow.
-    localStorage.setItem(STORAGE_KEY, payload);
-    if (supabaseClient && state.session.userId) {
-      supabaseClient
-        .from("profiles_state")
-        .upsert({ user_id: state.session.userId, state, updated_at: new Date().toISOString() })
-        .then(({ error }) => {
-          if (error) console.error("Supabase save failed:", error.message);
-        });
-    }
+// Loads (or, for a first-time sign-in, creates) this user's saved state row from Supabase.
+async function applySupabaseSession(session) {
+  if (!session || !session.user) {
+    state = defaultState();
+    return;
   }
+  const userId = session.user.id;
+  const { data: row, error } = await sb.from("app_state").select("state").eq("user_id", userId).maybeSingle();
+  if (error) console.error("Supabase load failed:", error.message);
+  const restored = row && row.state ? mergeState(defaultState(), row.state) : defaultState();
+  restored.session = sessionFromSupabaseUser(session.user);
+  if (!row) {
+    // First time we've seen this account (e.g. a brand new Google sign-in) - create its row.
+    const { session: _drop, ...toSave } = restored;
+    await sb.from("app_state").insert({ user_id: userId, state: toSave });
+  }
+  state = restored;
+}
+
+let saveStateDebounceTimer = null;
+
+// Writes the whole app state to wherever it belongs for the current session. Guests save
+// instantly to this tab's sessionStorage; signed-in users are debounced and upserted to
+// Supabase (Row Level Security means each user can only ever write their own row).
+function saveState() {
+  if (state.session.guest) {
+    sessionStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(state));
+    return;
+  }
+  if (!sb || !state.session.signedIn || !state.session.userId) return;
+  const { session, ...toSave } = state; // session lives in Supabase Auth, no need to duplicate it here
+  const userId = state.session.userId;
+  clearTimeout(saveStateDebounceTimer);
+  saveStateDebounceTimer = setTimeout(async () => {
+    const { error } = await sb.from("app_state").upsert({ user_id: userId, state: toSave });
+    if (error) console.error("Supabase save failed:", error.message);
+  }, 500);
 }
 
 function safe(value) {
@@ -623,6 +594,122 @@ function weekPlan() {
   ];
 }
 
+// Finds the specific EXERCISES entries that match a workout session's free-text description
+// (e.g. "bench press, incline press, dips" -> Barbell Bench Press / Incline Dumbbell Press / Dips),
+// so "View Exercises" shows exactly that day's exercises instead of a whole muscle group.
+// Returns [] when nothing matches well, and the caller falls back to browsing the group.
+
+// Everyday shorthand -> the exact library name it means.
+const EXERCISE_ALIASES = {
+  "squat": "Barbell Back Squat",
+  "bench press": "Barbell Bench Press",
+  "incline press": "Incline Dumbbell Press",
+  "shoulder press": "Standing Shoulder Press",
+  "dip": "Weighted Dip",
+  "curl": "Barbell Curl",
+  "calf raise": "Standing Calf Raise",
+  "row": "Barbell Row",
+  "core work": "Plank",
+  "core circuit": "Plank",
+  "jab cross": "Jab-Cross Combo",
+  "heavy bag": "Heavy Bag Rounds",
+  "kick": "Muay Thai Kicks",
+  "long run": "Long Slow Run",
+  "hill sprint": "Hill Repeats",
+  "sprint": "Interval Sprints",
+  "jump rope": "Double-Under Jump Rope",
+  "kettlebell swing": "Kettlebell Swing",
+  "bridge": "Glute Bridge",
+  "clam": "Clamshell",
+  "sun salutation": "Sun Salutation A",
+  "pigeon": "Pigeon Pose",
+  "forward fold": "Standing Forward Fold",
+  "standing fold": "Standing Forward Fold",
+  "side leg lift": "Side-Lying Leg Lift",
+  "compound lift": "Barbell Back Squat",
+  "tempo": "Tempo Run",
+  "race pace": "Tempo Run",
+  "fartlek": "Fartlek Run",
+  "varied pace": "Fartlek Run",
+  "interval": "Interval Sprints",
+  "easy long run": "Long Slow Run",
+  "zone 2": "Long Slow Run",
+  "aerobic base": "Long Slow Run",
+  "hiit": ["Burpee", "Kettlebell Swing", "Box Jump"],
+  "cross training": ["Jump Rope"],
+  "stride": "Strides",
+  "200m": "Interval Sprints",
+};
+// A bare muscle word ("chest, back, quads") means "a couple of good exercises for that muscle".
+const MUSCLE_WORDS = {
+  "chest": "Chest", "back": "Back", "shoulders": "Shoulders", "biceps": "Biceps",
+  "triceps": "Triceps", "quads": "Quads", "hamstrings": "Hamstrings", "glutes": "Glutes",
+  "core": "Core", "calves": "Calves",
+};
+const GENERIC_WORDS = new Set(["barbell", "dumbbell", "cable", "machine", "standing", "seated", "work", "the", "and", "with", "for", "all", "practice"]);
+
+function normalizeExerciseText(text) {
+  return text.toLowerCase().replace(/[-&]/g, " ").replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
+}
+function singular(word) {
+  return word.length > 3 && word.endsWith("s") && !word.endsWith("ss") ? word.slice(0, -1) : word;
+}
+
+function exercisesForSession(session) {
+  const sessionGroup = session[3];
+  const description = session[2];
+  if (!description) return [];
+  const byName = (name) => EXERCISES.find((item) => item[0] === name);
+  const matched = [];
+  const add = (item) => { if (item && !matched.includes(item)) matched.push(item); };
+  const levelOrder = { beginner: 0, intermediate: 1, advanced: 2 };
+  const userLevel = levelOrder[state.profile.level] ?? 0;
+
+  description.split(",").forEach((rawTerm) => {
+    const term = normalizeExerciseText(rawTerm);
+    if (!term) return;
+    const termWords = term.split(" ").map(singular);
+    const termKey = termWords.join(" ");
+
+    // 1) Bare muscle word -> two exercises for that muscle, closest to the user's level.
+    if (termWords.length === 1 && MUSCLE_WORDS[term]) {
+      EXERCISES.filter((item) => item[1] === MUSCLE_WORDS[term])
+        .sort((a, b) => Math.abs(levelOrder[a[2]] - userLevel) - Math.abs(levelOrder[b[2]] - userLevel))
+        .slice(0, 2).forEach(add);
+      return;
+    }
+    // 2) Everyday shorthand -> exact library name.
+    const aliasKey = Object.keys(EXERCISE_ALIASES).find((key) => (" " + termKey + " ").includes(" " + key + " "));
+    // 3) Otherwise score every exercise in the WHOLE library (not just this day's group).
+    let best = null;
+    let bestScore = 0;
+    EXERCISES.forEach((item) => {
+      if (matched.includes(item)) return;
+      const nameWords = normalizeExerciseText(item[0]).split(" ").map(singular);
+      const nameKey = nameWords.join(" ");
+      let score = 0;
+      if (nameKey === termKey) score = 10;
+      else if (nameKey.includes(termKey) || termKey.includes(nameKey)) score = 6;
+      else {
+        const sig = termWords.filter((w) => w.length > 2 && !GENERIC_WORDS.has(w));
+        const hits = sig.filter((w) => nameWords.includes(w)).length;
+        // Need at least half of the meaningful words to line up, otherwise it's a coincidence.
+        if (sig.length && hits / sig.length >= 0.5) score = 2 + hits;
+      }
+      if (score && item[1] === sessionGroup) score += 0.5; // tie-break toward the day's own group
+      if (score > bestScore) { bestScore = score; best = item; }
+    });
+    // An exact library-name match beats an alias; otherwise the alias beats a weak partial match.
+    if (aliasKey && bestScore < 10) [].concat(EXERCISE_ALIASES[aliasKey]).forEach((name) => add(byName(name)));
+    else if (best && bestScore >= 2) add(best);
+  });
+  return matched;
+}
+
+// Which specific day's exercises the library should show, or null for normal browsing.
+let dayViewExercises = null;
+let dayViewLabel = "";
+
 function renderWorkout() {
   const plan = weekPlan();
   el("split-goal").textContent = state.profile.goals[0] || "general fitness";
@@ -634,7 +721,7 @@ function renderWorkout() {
     const realToday = FULL_DAYS[new Date().getDay()];
     const isToday = session[0] === realToday;
     const todayLabel = isToday ? '<span class="today-label">Today</span>' : "";
-    const action = rest ? "" : '<button class="outline-button view-exercises" type="button" data-group="' + safe(session[3]) + '">View Exercises</button>';
+    const action = rest ? "" : '<button class="outline-button view-exercises" type="button" data-day-index="' + index + '">View Exercises</button>';
     const completeButton = rest ? "" : '<button class="complete-button ' + (complete ? "done" : "") + '" type="button" data-workout="' + index + '">' + (complete ? "Completed" : "Complete") + '</button>';
     return '<article class="week-card ' + (isToday ? "today" : "") + '">' + completeButton + '<span class="day-label">' + session[0] + '</span>' + todayLabel + '<h3>' + session[1] + '</h3><p>' + session[2] + '</p>' + action + '</article>';
   }).join("");
@@ -654,13 +741,37 @@ function renderWorkout() {
     renderProgress();
   }));
   all(".view-exercises").forEach((button) => button.addEventListener("click", () => {
-    exerciseGroup = EXERCISES.some((item) => item[1] === button.dataset.group) ? button.dataset.group : "Chest";
+    const index = num(button.dataset.dayIndex);
+    const session = plan[index];
+    const matches = exercisesForSession(session);
+    if (matches.length) {
+      // Real day-specific view: show exactly this day's assigned exercises, not a whole muscle group.
+      dayViewExercises = matches;
+      dayViewLabel = session[0] + " — " + session[1];
+      exerciseGroup = session[3] || "Chest";
+    } else {
+      // No confident match (e.g. a very free-form description) - fall back to browsing the group.
+      dayViewExercises = null;
+      exerciseGroup = EXERCISES.some((item) => item[1] === session[3]) ? session[3] : "Chest";
+    }
     changeTab("workout", "library");
     renderExercises();
   }));
 }
 
 function renderExercises() {
+  const banner = el("day-view-banner");
+  const libraryTools = el("library-tools");
+  if (dayViewExercises) {
+    banner.hidden = false;
+    libraryTools.hidden = true;
+    el("day-view-label").textContent = dayViewLabel;
+    el("exercise-grid").innerHTML = dayViewExercises.map(renderExerciseCard).join("");
+    wireExerciseCardButtons();
+    return;
+  }
+  banner.hidden = true;
+  libraryTools.hidden = false;
   // Always show base groups + any sport-specific groups the user cares about
   const sports = state.profile.sports || [];
   const baseGroups = ["Chest","Back","Shoulders","Biceps","Triceps","Quads","Hamstrings","Glutes","Core","Calves","Full Body"];
@@ -679,11 +790,25 @@ function renderExercises() {
   }));
   const query = el("exercise-search").value.trim().toLowerCase();
   const filtered = EXERCISES.filter((item) => (exerciseGroup === "Full Body" || item[1] === exerciseGroup) && item[0].toLowerCase().includes(query));
-  el("exercise-grid").innerHTML = filtered.length ? filtered.map((item) => {
-    return '<article class="exercise-card"><h3>' + item[0] + '</h3><div class="tag-row"><span class="tag accent">' + item[2] + '</span><span class="tag">' + item[3] + '</span><span class="tag">' + item[4] + '</span></div><p>' + item[5] + '</p><div class="exercise-actions"><button type="button" data-exercise-info="' + safe(item[0]) + '">How to do it</button><button type="button" data-exercise-demo="' + safe(item[0]) + '">Watch demo</button></div></article>';
-  }).join("") : '<div class="empty-state">No matching exercises found.</div>';
+  el("exercise-grid").innerHTML = filtered.length ? filtered.map(renderExerciseCard).join("") : '<div class="empty-state">No matching exercises found.</div>';
+  wireExerciseCardButtons();
+}
+
+function renderExerciseCard(item) {
+  return '<article class="exercise-card"><h3>' + item[0] + '</h3><div class="tag-row"><span class="tag accent">' + item[2] + '</span><span class="tag">' + item[3] + '</span><span class="tag">' + item[4] + '</span></div><p>' + item[5] + '</p><div class="exercise-actions"><button type="button" data-exercise-info="' + safe(item[0]) + '">How to do it</button><button type="button" data-exercise-demo="' + safe(item[0]) + '">Watch demo</button></div></article>';
+}
+
+function wireExerciseCardButtons() {
   all("[data-exercise-info]").forEach((button) => button.addEventListener("click", () => openExerciseInfo(button.dataset.exerciseInfo)));
-  all("[data-exercise-demo]").forEach((button) => button.addEventListener("click", () => toast("Demo search ready for " + button.dataset.exerciseDemo + ".")));
+  all("[data-exercise-demo]").forEach((button) => button.addEventListener("click", () => {
+    const query = encodeURIComponent(button.dataset.exerciseDemo + " exercise form");
+    window.open("https://www.youtube.com/results?search_query=" + query, "_blank", "noopener");
+  }));
+  const exitButton = el("day-view-exit");
+  if (exitButton) exitButton.onclick = () => {
+    dayViewExercises = null;
+    renderExercises();
+  };
 }
 
 function renderMealPlan() {
@@ -1101,8 +1226,7 @@ function renderProfile() {
   el("selected-sports").textContent = profile.sports.join(", ");
   el("selected-goals").textContent = profile.goals.join(", ");
   el("sport-choices").innerHTML = SPORT_CHOICES.map((item) => '<button type="button" class="choice-button ' + (profile.sports.includes(item) ? "active" : "") + '" data-sport="' + safe(item) + '">' + item + '</button>').join("");
-  const relevantGoals = getRelevantGoals(profile.sports);
-  el("goal-choices").innerHTML = relevantGoals.map((item) => '<button type="button" class="choice-button ' + (profile.goals.includes(item) ? "active" : "") + '" data-goal="' + safe(item) + '">' + item + '</button>').join("");
+  el("goal-choices").innerHTML = GOAL_CHOICES.map((item) => '<button type="button" class="choice-button ' + (profile.goals.includes(item) ? "active" : "") + '" data-goal="' + safe(item) + '">' + item + '</button>').join("");
   all("[data-sport]").forEach((button) => button.addEventListener("click", () => toggleChoice("sports", button.dataset.sport)));
   all("[data-goal]").forEach((button) => button.addEventListener("click", () => toggleChoice("goals", button.dataset.goal)));
   const form = el("profile-form");
@@ -1124,14 +1248,6 @@ function toggleChoice(key, value) {
     state.profile[key] = list.filter((item) => item !== value);
   } else {
     state.profile[key] = [...list, value];
-  }
-  if (key === "sports") {
-    // Sport list changed - drop any selected goals that no longer make sense
-    // for the new set of sports, and fall back to a sensible default if that
-    // empties the list out entirely.
-    const relevantGoals = getRelevantGoals(state.profile.sports);
-    const keptGoals = state.profile.goals.filter((goal) => relevantGoals.includes(goal));
-    state.profile.goals = keptGoals.length > 0 ? keptGoals : [relevantGoals[0] || "General fitness"];
   }
   saveState();
   renderProfile();
@@ -1198,8 +1314,10 @@ function openExerciseInfo(name) {
 
 let lastScanResult = null;
 
-function demoScanResult() {
-  return '<strong>Demo estimate (AI scanner not connected):</strong><span>Chicken 180g</span><span>Rice 220g</span><span>Vegetables 120g</span><span>Approx. 620 kcal</span><p class="scan-demo-note">This is a fixed placeholder, not a real analysis of your photo. Set up the Gemini-powered scanner (see README) for a real per-photo estimate.</p>';
+function demoScanResult(reason) {
+  // "reason" says WHY the real scanner wasn't used, so a broken setup is visible instead of silent.
+  const why = reason ? '<p class="scan-demo-note"><strong>Why you\'re seeing this:</strong> ' + safe(reason) + "</p>" : "";
+  return '<strong>Demo estimate (AI scanner not connected):</strong><span>Chicken 180g</span><span>Rice 220g</span><span>Vegetables 120g</span><span>Approx. 620 kcal</span><p class="scan-demo-note">This is a fixed placeholder, not a real analysis of your photo. Set up the Gemini-powered scanner (see README) for a real per-photo estimate.</p>' + why;
 }
 
 function renderScanItems(data) {
@@ -1227,107 +1345,114 @@ function fileToBase64(file) {
   });
 }
 
+// Phone photos are often 5-12 MB, and Netlify Functions reject request bodies over ~6 MB
+// (base64 also adds ~33%). Shrinking to 1024px JPEG keeps uploads small AND makes Gemini faster.
+async function imageToScanBase64(file, maxSize = 1024, quality = 0.82) {
+  try {
+    const url = URL.createObjectURL(file);
+    const img = await new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error("decode failed"));
+      image.src = url;
+    });
+    URL.revokeObjectURL(url);
+    const scale = Math.min(1, maxSize / Math.max(img.naturalWidth, img.naturalHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+    canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL("image/jpeg", quality);
+    return { base64: dataUrl.split(",")[1] || "", mimeType: "image/jpeg" };
+  } catch (err) {
+    // Some formats (e.g. HEIC on desktop browsers) can't be decoded - send the original instead.
+    return { base64: await fileToBase64(file), mimeType: file.type || "image/jpeg" };
+  }
+}
+
+function scanFailureReason(status, bodyText) {
+  let detail = "";
+  try { detail = (JSON.parse(bodyText).error || "").toString(); } catch (e) { /* not JSON */ }
+  if (status === 404) return "The /api/scan-food function wasn't found (404). It isn't deployed here - on Netlify check that netlify/functions/scan-food.js is in the repo, or run the site with `netlify dev` locally.";
+  if (status === 500 || status === 502) return "The scanner function ran but failed (" + status + ")" + (detail ? ": " + detail : ".") + " The most common cause is GEMINI_API_KEY missing in Netlify -> Site configuration -> Environment variables (redeploy after adding it).";
+  if (status === 413) return "The photo was too large for the server (413).";
+  if (status === 429) return "Gemini's rate limit was hit (429) - wait a minute and try again.";
+  return "The scanner returned status " + status + (detail ? ": " + detail : ".");
+}
+
 async function analyzeFoodPhoto(file) {
   if (!file) {
     lastScanResult = null;
-    return demoScanResult();
+    return demoScanResult("No photo was selected.");
   }
   try {
-    const base64 = await fileToBase64(file);
+    const { base64, mimeType } = await imageToScanBase64(file);
     const response = await fetch("/api/scan-food", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image: base64, mimeType: file.type || "image/jpeg" }),
+      body: JSON.stringify({ image: base64, mimeType }),
     });
-    if (!response.ok) throw new Error("bad status " + response.status);
+    if (!response.ok) {
+      lastScanResult = null;
+      return demoScanResult(scanFailureReason(response.status, await response.text().catch(() => "")));
+    }
     const data = await response.json();
-    if (!data || !Array.isArray(data.items)) throw new Error("bad payload");
+    if (!data || !Array.isArray(data.items)) throw new Error("unexpected response shape");
     if (!data.items.length) {
       lastScanResult = null;
       return '<strong>No food items detected.</strong><p class="scan-demo-note">Try a clearer, well-lit photo with the food clearly visible.</p>';
     }
+    // Make sure totals exist even if the function only returned per-item numbers.
+    ["calories", "protein", "carbs", "fat"].forEach((key) => {
+      if (!Number.isFinite(Number(data[key]))) data[key] = data.items.reduce((sum, item) => sum + (Number(item[key]) || 0), 0);
+    });
     lastScanResult = data;
     return renderScanItems(data);
   } catch (err) {
-    // Covers: no /api route, the Gemini key not configured yet, or an
-    // upstream failure - never break the scanner, just show the demo result.
+    // Network error (no server at all, e.g. opened via file://) or an unreadable response.
     lastScanResult = null;
-    return demoScanResult();
+    return demoScanResult("Couldn't reach /api/scan-food (" + (err && err.message ? err.message : "network error") + "). This happens when the page isn't served by Netlify - e.g. opened as a local file.");
   }
 }
 
-// Fill these in with your own Supabase project's URL and anon/public key to
-// enable real accounts (email/password + Google) that sync across any
-// device. Both values are safe to put in client code - Supabase enforces
-// access with Row Level Security policies on the server, not by hiding this
-// key (see README for setup steps and the required SQL). Without these,
-// only "Continue as Guest" works, and the Sign In form explains why.
-const SUPABASE_URL = "";
-const SUPABASE_ANON_KEY = "";
-let supabaseClient = null;
-if (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase) {
-  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-}
+// ── Sign-up password helper ──
+const PASSWORD_RULES = {
+  length: (pw) => pw.length >= 8,
+  case: (pw) => /[a-z]/.test(pw) && /[A-Z]/.test(pw),
+  number: (pw) => /\d/.test(pw),
+  symbol: (pw) => /[^A-Za-z0-9]/.test(pw),
+};
+const STRENGTH_LABELS = ["Too short", "Weak", "Fair", "Good", "Strong"];
 
-async function loadCloudState(userId) {
-  const { data, error } = await supabaseClient.from("profiles_state").select("state").eq("user_id", userId).maybeSingle();
-  if (error) {
-    console.error("Supabase load failed:", error.message);
-    return null;
-  }
-  return data ? data.state : null;
-}
-
-async function handleSupabaseSession(session) {
-  const user = session.user;
-  const cloud = await loadCloudState(user.id);
-  state = cloud ? mergeState(defaultState(), cloud) : defaultState();
-  state.session = {
-    signedIn: true,
-    guest: false,
-    userId: user.id,
-    name: (user.user_metadata && user.user_metadata.full_name) || user.email,
-    email: user.email,
-    provider: (user.app_metadata && user.app_metadata.provider) || "email",
-  };
-  saveState();
-  renderAll();
-  applyAuthGate();
-  toast("Welcome, " + state.session.name + "!");
-}
-
-function initSupabaseAuth() {
-  const authForm = el("auth-form");
-  const googleButton = el("google-oauth-button");
-  const note = el("auth-mode-note");
-  if (!supabaseClient) {
-    if (note) note.textContent = "Real accounts aren't configured yet - use Continue as Guest, or see README to enable Supabase.";
-    if (authForm) authForm.hidden = true;
-    if (googleButton) googleButton.hidden = true;
-    return;
-  }
-
-  // onAuthStateChange fires once immediately with whatever session already
-  // exists (e.g. a returning visitor, or right after a Google redirect back
-  // to this page) - that single listener covers both "just signed in" and
-  // "already had a session" without a separate getSession() call.
-  supabaseClient.auth.onAuthStateChange((event, session) => {
-    if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session) {
-      handleSupabaseSession(session);
-    } else if (event === "SIGNED_OUT") {
-      // localStorage[STORAGE_KEY] is only ever a cache of the signed-in
-      // account's cloud data - clear it here so it can never resurface as a
-      // stale "still signed in" state for the next person on this device.
-      localStorage.removeItem(STORAGE_KEY);
-      state = defaultState();
-      applyAuthGate();
-      renderAll();
-    }
+// Returns { level: 0-4, met: {length, case, number, symbol} } for a password.
+function passwordStrength(pw) {
+  const met = {};
+  let count = 0;
+  Object.keys(PASSWORD_RULES).forEach((rule) => {
+    met[rule] = PASSWORD_RULES[rule](pw);
+    if (met[rule]) count += 1;
   });
+  // Under 8 characters is always "too short" no matter what else it contains.
+  return { level: met.length ? Math.max(1, count) : 0, met, empty: !pw };
+}
 
-  googleButton.addEventListener("click", () => {
-    supabaseClient.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.origin } });
-  });
+function updatePasswordHelper() {
+  const pw = el("auth-password").value;
+  const { level, met, empty } = passwordStrength(pw);
+  el("pw-meter-bar").dataset.level = empty ? "0" : String(level);
+  el("pw-strength-label").textContent = "Password strength: " + (empty ? "enter a password" : STRENGTH_LABELS[level]);
+  all("#pw-checklist li").forEach((item) => item.classList.toggle("met", !!met[item.dataset.rule]));
+  updateConfirmMatch();
+}
+
+function updateConfirmMatch() {
+  const note = el("pw-match");
+  const confirm = el("auth-confirm").value;
+  if (!confirm) { note.hidden = true; return; }
+  const same = confirm === el("auth-password").value;
+  note.hidden = false;
+  note.className = "pw-match " + (same ? "ok" : "bad");
+  note.textContent = same ? "Passwords match." : "Passwords don't match yet.";
 }
 
 function events() {
@@ -1336,8 +1461,30 @@ function events() {
     event.preventDefault();
     changePage(link.dataset.nav);
   }));
-  all("[data-tab-group]").forEach((button) => button.addEventListener("click", () => changeTab(button.dataset.tabGroup, button.dataset.tab)));
-  all("[data-next-profile]").forEach((button) => button.addEventListener("click", () => changeTab("profile", button.dataset.nextProfile)));
+  all("[data-tab-group]").forEach((button) => button.addEventListener("click", () => {
+    // Clicking the Exercise Library tab directly (not via a day's "View Exercises" button)
+    // always starts from normal browsing, not a leftover day-specific view.
+    if (button.dataset.tabGroup === "workout" && button.dataset.tab === "library" && dayViewExercises) {
+      dayViewExercises = null;
+      renderExercises();
+    }
+    changeTab(button.dataset.tabGroup, button.dataset.tab);
+  }));
+  all("[data-next-profile]").forEach((button) => button.addEventListener("click", () => {
+    const currentPanel = button.closest("[data-panel]");
+    const from = currentPanel ? currentPanel.dataset.panel : "";
+    const to = button.dataset.nextProfile;
+    // Only guard forward navigation - never block clicking "Back".
+    if (from === "sports" && to === "goals" && state.profile.sports.length === 0) {
+      toast("Pick at least one sport to continue.");
+      return;
+    }
+    if (from === "goals" && to === "details" && state.profile.goals.length === 0) {
+      toast("Pick at least one goal to continue.");
+      return;
+    }
+    changeTab("profile", to);
+  }));
   el("menu-button").addEventListener("click", () => {
     const open = document.body.classList.toggle("menu-open");
     el("menu-button").setAttribute("aria-expanded", String(open));
@@ -1349,64 +1496,115 @@ function events() {
     saveState();
     applyTheme();
   });
-  el("sign-out").addEventListener("click", () => {
+  el("sign-out").addEventListener("click", async () => {
     const wasGuest = state.session.guest;
     if (wasGuest) {
       // Guest data lives only in sessionStorage for this tab - drop it entirely on sign out
-      // rather than writing it into the persistent slot, so it never leaks into the next
+      // rather than writing it into a persistent slot, so it never leaks into the next
       // person's (or device's) session.
       sessionStorage.removeItem(GUEST_STORAGE_KEY);
-      state.session = { signedIn: false, name: "", guest: false, userId: null };
-      applyAuthGate();
-      renderAll();
-      toast("Guest session ended - nothing from it was saved.");
-    } else if (supabaseClient && state.session.userId) {
-      supabaseClient.auth.signOut(); // triggers the SIGNED_OUT handler in initSupabaseAuth
-      toast("Signed out.");
-    } else {
-      state.session = { signedIn: false, name: "", guest: false, userId: null };
-      applyAuthGate();
-      renderAll();
+    } else if (sb) {
+      await sb.auth.signOut(); // clears Supabase's own session storage on this device
     }
+    state.session = { signedIn: false, name: "", guest: false };
+    applyAuthGate();
+    renderAll();
+    toast(wasGuest ? "Guest session ended - nothing from it was saved." : "Signed out. Your data stays saved in your account.");
   });
   all("[data-auth-tab]").forEach((button) => button.addEventListener("click", () => {
     all("[data-auth-tab]").forEach((b) => { b.classList.toggle("active", b === button); b.setAttribute("aria-selected", b === button ? "true" : "false"); });
     const isSignup = button.dataset.authTab === "signup";
     el("auth-submit").textContent = isSignup ? "Create Account" : "Sign In";
-    if (el("auth-name-label")) el("auth-name-label").hidden = !isSignup;
+    el("auth-name-label").hidden = !isSignup;
+    el("auth-name").required = isSignup;
+    // Strength meter + confirm field only matter when creating an account.
+    el("pw-helper").hidden = !isSignup;
+    el("auth-confirm-label").hidden = !isSignup;
+    el("auth-confirm").required = isSignup;
+    el("auth-confirm").value = "";
+    el("auth-password").autocomplete = isSignup ? "new-password" : "current-password";
+    updatePasswordHelper();
   }));
+  el("auth-password").addEventListener("input", updatePasswordHelper);
+  el("auth-confirm").addEventListener("input", updateConfirmMatch);
   el("auth-form").addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (!supabaseClient) {
-      toast("Real accounts aren't configured yet - use Continue as Guest, or see README to enable Supabase.");
+    if (!sb) {
+      toast("Supabase isn't configured yet - add your project URL and anon key in script.js.");
       return;
     }
     const name = el("auth-name").value.trim();
     const email = el("auth-email").value.trim();
     const password = el("auth-password").value;
     const isSignup = el("auth-submit").textContent.trim() === "Create Account";
-    const submitButton = event.target.querySelector('button[type="submit"]');
+    const submitButton = el("auth-submit");
+    if (isSignup) {
+      // Client-side checks first so people get instant, specific feedback.
+      if (!passwordStrength(password).met.length) {
+        toast("Use a password with at least 8 characters.");
+        el("auth-password").focus();
+        return;
+      }
+      if (el("auth-confirm").value !== password) {
+        toast("Passwords don't match - please re-enter them.");
+        el("auth-confirm").focus();
+        return;
+      }
+    }
     submitButton.disabled = true;
-    const { error } = isSignup
-      ? await supabaseClient.auth.signUp({ email, password, options: { data: { full_name: name } } })
-      : await supabaseClient.auth.signInWithPassword({ email, password });
-    submitButton.disabled = false;
-    if (error) {
-      toast(error.message);
+
+    if (isSignup) {
+      const { data, error } = await sb.auth.signUp({
+        email,
+        password,
+        options: { data: { name } }, // stored as user_metadata, read back by sessionFromSupabaseUser()
+      });
+      submitButton.disabled = false;
+      if (error) {
+        toast(error.message);
+        return;
+      }
+      if (!data.session) {
+        // Email confirmation is enabled on this Supabase project - there's no session yet.
+        toast("Account created! Check " + email + " to confirm your address, then sign in.");
+        return;
+      }
+      // Brand new account - always start completely clean, never leak old/default profile data.
+      state = defaultState();
+      state.session = sessionFromSupabaseUser(data.session.user);
+      const { session: _drop, ...toSave } = state;
+      await sb.from("app_state").insert({ user_id: state.session.userId, state: toSave });
+    } else {
+      const { data, error } = await sb.auth.signInWithPassword({ email, password });
+      submitButton.disabled = false;
+      if (error) {
+        toast(error.message === "Invalid login credentials" ? "Incorrect email or password." : error.message);
+        return;
+      }
+      // Correct credentials - load this account's own saved data, never anyone else's.
+      await applySupabaseSession(data.session);
+    }
+    applyAuthGate();
+    renderAll();
+    toast("Welcome" + (state.session.name ? ", " + state.session.name : "") + "!");
+  });
+  el("google-signin-button").addEventListener("click", async () => {
+    if (!sb) {
+      toast("Supabase isn't configured yet - add your project URL and anon key in script.js.");
       return;
     }
-    // A successful sign-in/sign-up fires onAuthStateChange (see
-    // initSupabaseAuth), which loads the account's data and updates the UI -
-    // nothing more to do here except handle the "confirm your email" case.
-    toast(isSignup ? "Check your email to confirm your account, then sign in." : "Signing in...");
+    // This redirects the whole page to Google and back - the redirect-back is picked up by
+    // the onAuthStateChange listener in boot(), which loads/creates this account's saved state.
+    const { error } = await sb.auth.signInWithOAuth({ provider: "google" });
+    if (error) toast(error.message);
   });
   el("auth-guest").addEventListener("click", () => {
     // Guest mode always starts from a completely clean slate, kept in this tab's
-    // sessionStorage only - it never reads or overwrites a real signed-in account's
-    // saved profile, and it disappears when the tab closes.
+    // sessionStorage only - it never reads or overwrites the real signed-in account's
+    // saved profile in localStorage, and it disappears when the tab closes.
     sessionStorage.removeItem(GUEST_STORAGE_KEY);
     state = defaultState();
-    state.session = { signedIn: true, name: "Guest", guest: true, userId: null };
+    state.session = { signedIn: true, name: "Guest", guest: true };
     saveState();
     applyAuthGate();
     renderAll();
@@ -1434,7 +1632,13 @@ function events() {
     el("scan-food").disabled = false;
     el("scan-result").hidden = true;
   });
-  el("open-camera").addEventListener("click", () => toast("Use Upload photo to scan a food image in this local demo."));
+  el("open-camera").addEventListener("click", () => {
+    // On phones "capture" opens the camera directly; desktop browsers just show the file picker.
+    const input = el("food-upload");
+    input.setAttribute("capture", "environment");
+    input.click();
+    input.addEventListener("change", () => input.removeAttribute("capture"), { once: true });
+  });
   el("scan-food").addEventListener("click", async () => {
     const file = el("food-upload").files && el("food-upload").files[0];
     el("scan-result").hidden = false;
@@ -1587,9 +1791,44 @@ function applyAuthGate() {
   }
 }
 
+function finishBoot() {
+  renderAll();
+  changePage(window.location.hash.slice(1) || "dashboard", false);
+  applyAuthGate();
+  applyTheme();
+}
+
+// Boots the app. A guest session (this tab only) needs no network call and takes priority.
+// Otherwise, if Supabase is configured, onAuthStateChange fires once immediately with whatever
+// session already exists on this device (or null), then again on every future sign-in/out/
+// token-refresh/Google-redirect-back - so this one listener covers both "restore my session on
+// page load" and "react to auth changes" without a separate getSession() call.
+function boot() {
+  const guestRaw = sessionStorage.getItem(GUEST_STORAGE_KEY);
+  if (guestRaw) {
+    try {
+      state = mergeState(defaultState(), JSON.parse(guestRaw));
+    } catch {
+      state = defaultState();
+    }
+    finishBoot();
+    return;
+  }
+  if (!sb) {
+    finishBoot(); // Supabase not configured yet - show the sign-in screen as-is
+    return;
+  }
+  sb.auth.onAuthStateChange(async (event, session) => {
+    if (state.session.guest) return; // a guest session should never be overwritten by this
+    if (event === "SIGNED_OUT") {
+      state = defaultState();
+    } else {
+      await applySupabaseSession(session);
+    }
+    finishBoot();
+  });
+}
+
 events();
-renderAll();
-changePage(window.location.hash.slice(1) || "dashboard", false);
-applyAuthGate();
 applyTheme();
-initSupabaseAuth();
+boot();
