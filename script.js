@@ -809,6 +809,7 @@ function wireExerciseCardButtons() {
   if (exitButton) exitButton.onclick = () => {
     dayViewExercises = null;
     renderExercises();
+    changeTab("workout", "split"); // "Back" returns to the weekly split, not the library
   };
 }
 
@@ -962,7 +963,7 @@ function updateLiveStats() {
   el("cardio-timer").textContent = fmtTime(cardioSeconds);
   el("live-distance").textContent = km.toFixed(2);
   el("live-pace").textContent = fmtPace(km, cardioSeconds);
-  el("cardio-burned").textContent = Math.round(cardioCalories(cardioSeconds));
+  el("cardio-burned").textContent = Math.round(cardioCalories(cardioMovingSeconds));
   el("live-elevation").textContent = Math.round(cardioElevGain);
   // speed: last 3 points avg
   if (cardioRoute.length >= 2) {
@@ -970,7 +971,7 @@ function updateLiveStats() {
     let d = 0;
     for (let i = 1; i < recent.length; i++) d += haversineKm(recent[i - 1], recent[i]);
     const dt = (recent[recent.length - 1].t - recent[0].t) / 3600000;
-    el("live-speed").textContent = dt > 0 ? (d / dt).toFixed(1) : "0.0";
+    el("live-speed").textContent = dt > 0 && Date.now() - cardioLastMoveAt < 8000 ? (d / dt).toFixed(1) : "0.0";
   }
 }
 
@@ -1008,6 +1009,9 @@ function renderCardio() {
     : '<div class="empty-state">No activities yet. Hit Start to record your first session.</div>';
 }
 
+let cardioMovingSeconds = 0;
+let cardioLastMoveAt = 0;
+
 function startGpsSession() {
   if (!navigator.geolocation) {
     toast("GPS not available on this device.");
@@ -1018,6 +1022,8 @@ function startGpsSession() {
   el("cardio-live").hidden = false;
   el("live-activity-name").textContent = cardioSelectedActivity.name;
   cardioSeconds = 0;
+  cardioMovingSeconds = 0;
+  cardioLastMoveAt = 0;
   cardioRoute = [];
   cardioElevGain = 0;
   cardioPaused = false;
@@ -1026,7 +1032,12 @@ function startGpsSession() {
 
   // timer
   cardioTimer = window.setInterval(() => {
-    if (!cardioPaused) { cardioSeconds++; updateLiveStats(); }
+    if (!cardioPaused) {
+      cardioSeconds++;
+      // Only time spent actually MOVING (a real GPS position change in the last 8 s) earns calories.
+      if (Date.now() - cardioLastMoveAt < 8000) cardioMovingSeconds++;
+      updateLiveStats();
+    }
   }, 1000);
 
   // GPS watch
@@ -1034,11 +1045,13 @@ function startGpsSession() {
     (pos) => {
       el("map-no-gps").hidden = true;
       if (cardioPaused) return;
+      if (pos.coords.accuracy && pos.coords.accuracy > 35) return; // weak fix (e.g. desktop Wi-Fi location): ignore
       const point = { lat: pos.coords.latitude, lng: pos.coords.longitude, alt: pos.coords.altitude || 0, t: Date.now() };
       if (cardioRoute.length > 0) {
         const last = cardioRoute[cardioRoute.length - 1];
         const dist = haversineKm(last, point);
-        if (dist < 0.003) return; // ignore jitter < 3 m
+        if (dist < 0.005) return; // ignore GPS jitter under 5 m
+        cardioLastMoveAt = Date.now();
         if (point.alt && last.alt && point.alt > last.alt) cardioElevGain += point.alt - last.alt;
       }
       cardioRoute.push(point);
@@ -1069,7 +1082,7 @@ function finishGpsSession() {
       name: cardioSelectedActivity.name,
       icon: cardioSelectedActivity.icon,
       seconds: cardioSeconds,
-      calories: cardioCalories(cardioSeconds),
+      calories: cardioCalories(cardioMovingSeconds),
       km: km,
       elevGain: cardioElevGain,
     });
@@ -1419,30 +1432,56 @@ async function analyzeFoodPhoto(file) {
 }
 
 // ── Sport-aware goals ──
-const GENERAL_GOALS = ["Return from injury", "General fitness"];
-const SPORT_GOALS = {
-  "Bodybuilding": ["Lean bulk", "Muscle hypertrophy", "Cut and stay muscular", "Body recomposition", "Fix weak points and symmetry", "Contest prep"],
-  "Powerlifting": ["Increase strength while lean", "Hit a squat/bench/deadlift PR", "Peak for a meet", "Lean bulk", "Improve lifting technique"],
-  "CrossFit": ["Improve WOD performance", "Build work capacity", "Increase strength while lean", "Master gymnastics skills"],
-  "Running": ["Run a 5K", "Run a 10K", "Run a half marathon", "Run a marathon", "Build endurance", "Improve running speed"],
-  "Trail Running": ["Run a trail race", "Build hill and climbing endurance", "Build endurance"],
-  "Sprinting": ["Improve sprint speed", "Build explosive power", "Improve acceleration"],
-  "Boxing": ["Boxing conditioning", "Improve footwork and speed", "Build fight endurance", "Make weight"],
-  "Kickboxing": ["Build fight endurance", "Improve kick power", "Make weight"],
-  "Martial Arts": ["Build fight endurance", "Improve flexibility and mobility", "Make weight"],
-  "Brazilian Jiu-Jitsu": ["Build grappling endurance", "Improve mobility", "Make weight"],
-  "Wrestling": ["Build grappling endurance", "Increase strength while lean", "Make weight"],
-  "Cycling": ["Build endurance", "Improve cycling power", "Complete a long ride"],
-  "Mountain Biking": ["Build endurance", "Improve leg power", "Improve balance and core strength"],
-  "Swimming": ["Build swim endurance", "Improve stroke technique", "Improve swim speed"],
-  "Triathlon": ["Complete a triathlon", "Build endurance", "Improve transitions and pacing"],
-  "Yoga": ["Improve mobility", "Build core strength", "Reduce stress", "Improve posture"],
-  "Pilates": ["Build core strength", "Improve posture", "Improve mobility"],
-  "Calisthenics": ["Master pull-ups and muscle-ups", "Build bodyweight strength", "Learn handstand skills", "Body recomposition"],
-  "Rock Climbing": ["Build finger and grip strength", "Improve climbing endurance", "Improve mobility"],
-  "Hiking": ["Build endurance", "Prepare for a trek", "Strengthen legs and core"],
+const SG = {
+  strength: ["Increase strength while lean", "Hit a new squat PR", "Hit a new bench press PR", "Hit a new deadlift PR", "Improve lifting technique", "Build explosive power", "Improve grip strength"],
+  endurance: ["Build endurance", "Improve VO2 max", "Improve recovery between sessions", "Lose body fat while keeping fitness"],
+  combat: ["Build fight endurance", "Improve footwork and speed", "Build punching/striking power", "Improve flexibility and mobility", "Make weight for a competition", "Improve reaction time", "Build a strong core and neck", "Prepare for a first competition"],
+  team: ["Improve speed and agility", "Build explosive power", "Improve sport-specific endurance", "Prevent injuries", "Improve vertical jump", "Improve change of direction", "Build a strong core"],
+  racket: ["Improve footwork and agility", "Build shoulder and arm strength", "Improve rotational power", "Build match endurance", "Prevent shoulder and elbow injuries", "Improve reaction time"],
+  mind: ["Reduce stress", "Improve posture", "Improve balance and stability", "Improve flexibility", "Improve sleep and recovery", "Build a daily practice habit"],
 };
-const FALLBACK_SPORT_GOALS = ["Improve sport performance", "Build endurance", "Increase strength while lean", "Improve mobility"];
+const SPORT_GOALS = {
+  "Bodybuilding": ["Lean bulk", "Aggressive bulk", "Cutting / fat loss", "Body recomposition", "Muscle hypertrophy", "Build bigger arms", "Wider shoulders", "Stronger chest", "Build a bigger back", "Grow legs and glutes", "Define abs and core", "Prep for a show", "Maintain physique", "Improve symmetry", "Fix weak points", "Increase strength while lean"],
+  "Powerlifting": [...SG.strength, "Peak for a meet", "Lean bulk", "Move up a weight class", "Make weight safely", "Improve mobility for squat depth"],
+  "CrossFit": ["Improve WOD performance", "Build work capacity", "Master gymnastics skills", "Get first muscle-up", "Improve Olympic lifting technique", "Improve double-unders", "Prepare for a competition", ...SG.strength.slice(0, 2)],
+  "Running": ["Run your first 5K", "Run a faster 5K", "Run a 10K", "Run a half marathon", "Run a marathon", "Improve running speed", "Improve running economy", "Lose weight through running", ...SG.endurance],
+  "Trail Running": ["Run a trail race", "Build hill and climbing endurance", "Improve technical downhill running", "Run an ultramarathon", "Strengthen ankles and stabilisers", ...SG.endurance],
+  "Sprinting": ["Improve 100m time", "Improve 200m/400m time", "Improve acceleration", "Improve top-end speed", "Build explosive power", "Improve start and block technique", "Prevent hamstring injuries"],
+  "Martial Arts": [...SG.combat],
+  "Boxing": ["Boxing conditioning", ...SG.combat],
+  "Kickboxing": [...SG.combat, "Improve kick power and balance"],
+  "Brazilian Jiu-Jitsu": ["Build grappling endurance", "Improve hip mobility", "Build grip and forearm strength", "Improve guard retention", "Make weight for a competition", "Earn the next belt", "Prevent joint injuries"],
+  "Wrestling": ["Build grappling endurance", "Improve takedown power", "Build neck and core strength", "Make weight for a competition", "Improve explosiveness", "Increase strength while lean"],
+  "Cycling": ["Build cycling endurance", "Improve FTP / power", "Complete a century ride", "Improve climbing", "Improve sprint power", "Prevent back and knee pain", ...SG.endurance.slice(1)],
+  "Mountain Biking": ["Improve technical handling", "Build leg power", "Improve balance and core strength", "Build endurance for long rides", "Improve upper-body strength", "Prevent crash injuries"],
+  "Swimming": ["Improve swim speed", "Improve stroke technique", "Build swim endurance", "Swim a open-water race", "Improve shoulder mobility", "Improve breathing efficiency", "Build core and kick strength"],
+  "Triathlon": ["Complete a sprint triathlon", "Complete an Olympic triathlon", "Complete a half or full Ironman", "Improve transitions", "Improve pacing across all three sports", ...SG.endurance],
+  "Yoga": [...SG.mind, "Master a handstand", "Do the splits", "Build core strength", "Deepen backbends"],
+  "Pilates": ["Build core strength", "Improve posture", "Improve flexibility", "Rehab and prevent back pain", "Improve body control", "Tone and lengthen muscles"],
+  "Calisthenics": ["Master pull-ups", "Get first muscle-up", "Learn a handstand", "Learn a front lever", "Learn a planche", "Build bodyweight strength", "Body recomposition", "Master dips and push-up variations"],
+  "Rock Climbing": ["Build finger and grip strength", "Climb a harder grade", "Improve climbing endurance", "Improve flexibility and hip mobility", "Improve pull strength", "Prevent finger and shoulder injuries"],
+  "Hiking": ["Prepare for a multi-day trek", "Build leg and core strength", "Improve uphill endurance", "Build balance and ankle strength", "Carry a heavier pack comfortably", ...SG.endurance.slice(0, 2)],
+  "Football": [...SG.team, "Improve sprint speed", "Improve ball-striking power"],
+  "Basketball": [...SG.team, "Improve shooting stamina", "Improve defensive footwork"],
+  "Tennis": [...SG.racket, "Improve serve power"],
+  "Badminton": [...SG.racket, "Improve jump-smash power"],
+  "Table Tennis": ["Improve reaction time", "Improve footwork", "Build forearm and wrist strength", "Improve match focus", "Prevent shoulder strain"],
+  "Volleyball": [...SG.team, "Improve spike and block jump", "Build shoulder strength"],
+  "Cricket": ["Improve batting power", "Improve bowling speed", "Improve fielding agility", "Build rotational core strength", "Prevent back and shoulder injuries", "Build stamina for long matches"],
+  "Baseball": ["Improve throwing velocity", "Improve bat speed", "Build rotational power", "Prevent shoulder and elbow injuries", "Improve sprint speed", "Improve fielding agility"],
+  "Golf": ["Increase driving distance", "Improve rotational mobility", "Build core and glute strength", "Improve balance and swing consistency", "Prevent lower-back pain", "Build walking endurance for 18 holes"],
+  "Rugby": [...SG.team, "Build tackling strength", "Gain functional mass", "Build neck strength"],
+  "Hockey": [...SG.team, "Improve skating or running speed", "Build shot power"],
+  "Skiing": ["Build leg endurance", "Improve balance and edge control", "Strengthen knees and prevent injury", "Improve core stability", "Prepare for ski season"],
+  "Snowboarding": ["Build leg endurance", "Improve balance and core stability", "Strengthen wrists and prevent falls injuries", "Prepare for the season", "Improve flexibility"],
+  "Surfing": ["Improve paddling endurance", "Improve pop-up speed", "Build shoulder strength and mobility", "Improve balance and core", "Improve breath-hold and recovery"],
+  "Rowing": ["Improve 2K erg time", "Build rowing endurance", "Build leg drive and back strength", "Improve technique", "Prevent lower-back pain", "Make lightweight weight"],
+  "Dance": ["Improve flexibility", "Build stamina", "Improve balance and control", "Build leg and core strength", "Prevent ankle and knee injuries", "Prepare for a performance"],
+  "Gymnastics": ["Build shoulder and core strength", "Improve flexibility", "Learn a new skill", "Improve body control", "Prevent wrist and shoulder injuries", "Improve explosive power"],
+  "Skateboarding": ["Improve balance and ankle strength", "Learn a new trick", "Build leg power", "Prevent wrist and ankle injuries", "Improve endurance for long sessions"],
+};
+const FALLBACK_SPORT_GOALS = ["Improve sport performance", "Build endurance", "Increase strength while lean", "Improve mobility", "Prevent injuries"];
+const GENERAL_GOALS = ["Lose body fat", "Build muscle", "Improve overall health", "Return from injury", "General fitness"];
 
 function getRelevantGoals() {
   const goals = [];
@@ -1909,6 +1948,7 @@ function applyAuthGate() {
     shell.hidden = true;
     document.body.classList.remove("onboarding-mode");
     resetScanner();
+    dayViewExercises = null; dayViewLabel = "";
     el("auth-form").reset();
     return;
   }
