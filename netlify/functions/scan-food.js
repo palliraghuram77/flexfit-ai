@@ -7,7 +7,7 @@
 //        calories, protein, carbs, fat   (totals, summed here from items)
 //      }
 
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/" + MODEL + ":generateContent";
 const MAX_BASE64_LENGTH = 6_000_000; // roughly a 4.5MB photo once decoded
 
