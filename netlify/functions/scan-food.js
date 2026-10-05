@@ -8,7 +8,7 @@
 //      }
 
 const MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
-const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/" + MODEL + ":generateContent";
+const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
 const MAX_BASE64_LENGTH = 6_000_000; // roughly a 4.5MB photo once decoded
 
 const PROMPT =
@@ -42,6 +42,23 @@ const RESPONSE_SCHEMA = {
   required: ["items"],
 };
 
+// Gemini sometimes answers 503 "high demand" for a few seconds. Retry, then try an optional backup model.
+const MODEL_LIST = [MODEL, process.env.GEMINI_FALLBACK_MODEL].filter((m, i, a) => m && a.indexOf(m) === i);
+async function fetchWithRetry(options) {
+  let last;
+  for (const model of MODEL_LIST) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const body = JSON.parse(options.body);
+      body.generationConfig = body.generationConfig || {};
+      body.generationConfig.thinkingConfig = model.startsWith("gemini-3") ? { thinkingLevel: "low" } : { thinkingBudget: 0 };
+      last = await fetch(GEMINI_BASE + model + ":generateContent", { ...options, body: JSON.stringify(body) });
+      if (last.ok || ![429, 500, 502, 503, 504].includes(last.status)) return last;
+      await new Promise((resolve) => setTimeout(resolve, 700 * (attempt + 1)));
+    }
+  }
+  return last;
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: JSON.stringify({ error: "Method not allowed" }) };
@@ -73,7 +90,7 @@ exports.handler = async (event) => {
   }
 
   try {
-    const response = await fetch(GEMINI_URL, {
+    const response = await fetchWithRetry({
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify({
@@ -88,7 +105,7 @@ exports.handler = async (event) => {
           responseSchema: RESPONSE_SCHEMA,
           maxOutputTokens: 1536,
           temperature: 0.3,
-          thinkingConfig: MODEL.startsWith("gemini-3") ? { thinkingLevel: "low" } : { thinkingBudget: 0 },
+          thinkingConfig: { thinkingLevel: "low" },
         },
       }),
     });

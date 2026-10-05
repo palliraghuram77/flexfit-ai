@@ -842,6 +842,7 @@ function renderIngredients() {
     state.ingredients.splice(num(button.dataset.removeIngredient), 1);
     saveState();
     renderIngredients();
+    el("ai-meal-results").innerHTML = ""; // old ideas no longer match the pantry
   }));
 }
 
@@ -1152,28 +1153,25 @@ function renderChatHistory() {
 }
 
 async function fetchJiyaReply(message, chat) {
-  try {
-    const response = await fetch("/api/jiya", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: message,
-        profile: state.profile,
-        targets: state.targets,
-        history: (chat ? chat.messages : []).filter((m) => !m.pending).slice(-6).map((m) => ({ role: m.role, text: m.text })),
-      }),
-    });
-    if (!response.ok) throw new Error("bad status " + response.status);
-    const data = await response.json();
-    if (!data || !data.reply) throw new Error("no reply in response");
-    return data.reply;
-  } catch (err) {
-    // Covers: no /api route (plain GitHub Pages, or opened via file://), the
-    // Gemini key not configured yet on the server, or an upstream/network
-    // failure. The app should never break just because the AI backend is
-    // unreachable - fall back to the local rule-based coach instead.
-    return coachReply(message);
+  const payload = JSON.stringify({
+    message: message,
+    profile: state.profile,
+    targets: state.targets,
+    history: (chat ? chat.messages : []).filter((m) => !m.pending).slice(-6).map((m) => ({ role: m.role, text: m.text })),
+  });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await fetch("/api/jiya", { method: "POST", headers: { "Content-Type": "application/json" }, body: payload });
+      if (!response.ok) throw new Error("bad status " + response.status);
+      const data = await response.json();
+      if (!data || !data.reply) throw new Error("no reply in response");
+      return data.reply;
+    } catch (err) {
+      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 1500)); // brief pause, then retry once
+    }
   }
+  // Both tries failed (AI busy or offline): answer from the built-in coach, and say so.
+  return "(Jiya's AI is busy, so this is a quick offline answer) " + coachReply(message);
 }
 
 async function addChat(prompt) {
@@ -1330,9 +1328,7 @@ function openExerciseInfo(name) {
 let lastScanResult = null;
 
 function demoScanResult(reason) {
-  // "reason" says WHY the real scanner wasn't used, so a broken setup is visible instead of silent.
-  const why = reason ? '<p class="scan-demo-note"><strong>Why you\'re seeing this:</strong> ' + safe(reason) + "</p>" : "";
-  return '<strong>Demo estimate (AI scanner not connected):</strong><span>Chicken 180g</span><span>Rice 220g</span><span>Vegetables 120g</span><span>Approx. 620 kcal</span><p class="scan-demo-note">This is a fixed placeholder, not a real analysis of your photo. Set up the Gemini-powered scanner (see README) for a real per-photo estimate.</p>' + why;
+  return '<strong>Couldn\'t scan this photo</strong><p class="scan-demo-note">' + safe(reason || "Something went wrong. Please try again.") + '</p>';
 }
 
 function renderScanItems(data) {
@@ -1389,6 +1385,7 @@ function scanFailureReason(status, bodyText) {
   let detail = "";
   try { const parsed = JSON.parse(bodyText); detail = String(parsed.detail || parsed.error || "").slice(0, 220); } catch (e) { /* not JSON */ }
   if (status === 404) return "The /api/scan-food function wasn't found (404). It isn't deployed here - on Netlify check that netlify/functions/scan-food.js is in the repo, or run the site with `netlify dev` locally.";
+  if (/high demand|UNAVAILABLE|503/i.test(detail)) return "Google's AI is busy right now (high demand). The app already retried - wait a few seconds and press Scan Food with AI again.";
   if (status === 502) return "Gemini rejected or failed the request" + (detail ? " (" + detail + ")" : "") + ". Open Netlify -> Logs -> Functions -> scan-food for Google's exact message - usually an invalid model name or API key.";
   if (status === 500) return "The scanner function ran but failed (" + status + ")" + (detail ? ": " + detail : ".") + " The most common cause is GEMINI_API_KEY missing in Netlify -> Site configuration -> Environment variables (redeploy after adding it).";
   if (status === 413) return "The photo was too large for the server (413).";
@@ -1557,6 +1554,51 @@ const NUTRITION_DB = {
   "peanut butter": [588, 25, 20, 50, "f", 20], almond: [579, 21, 22, 50, "f", 25], nuts: [600, 18, 20, 52, "f", 25], cheese: [402, 25, 1.3, 33, "f", 30],
   oil: [884, 0, 0, 100, "f", 10], ghee: [900, 0, 0, 100, "f", 10], butter: [717, 0.9, 0.1, 81, "f", 10],
 };
+
+const RECIPES = [
+  ["Chicken rice bowl", "nv", "chicken,rice,broccoli,oil", "Pan-sear the chicken, steam the broccoli and serve over rice."],
+  ["Chicken veggie stir-fry", "nv", "chicken,capsicum,onion,rice,oil", "Stir-fry chicken with onion and capsicum on high heat, serve with rice."],
+  ["Chicken wrap", "nv", "chicken,roti,cucumber,onion,curd", "Fill a roti with spiced chicken, cucumber, onion and a spoon of curd."],
+  ["Egg fried rice", "v", "egg,rice,peas,carrot,oil", "Scramble eggs, toss with rice, peas and carrot."],
+  ["Masala omelette and toast", "v", "egg,onion,tomato,bread,oil", "Whisk eggs with onion and tomato, cook as an omelette, serve with toast."],
+  ["Egg bhurji with roti", "v", "egg,onion,tomato,roti,oil", "Scramble eggs with onion and tomato, eat with roti."],
+  ["Egg and potato hash", "v", "egg,potato,onion,capsicum,oil", "Pan-fry diced potato and veg, crack eggs on top and cover."],
+  ["Mushroom spinach omelette", "v", "egg,mushroom,spinach,oil", "Saute mushroom and spinach, pour in beaten eggs."],
+  ["Soya chunk curry with rice", "vg", "soya,tomato,onion,rice,oil", "Soak soya chunks, simmer in onion-tomato masala, serve with rice."],
+  ["Soya veggie stir-fry bowl", "vg", "soya,capsicum,broccoli,rice", "Stir-fry soaked soya with veg, serve over rice."],
+  ["Paneer bhurji wrap", "v", "paneer,capsicum,onion,roti", "Crumble paneer with onion and capsicum, roll in a roti."],
+  ["Paneer tikka bowl", "v", "paneer,capsicum,rice,curd", "Marinate paneer in curd and spices, grill, serve over rice."],
+  ["Tofu veggie scramble", "vg", "tofu,spinach,tomato,bread", "Crumble tofu into a pan with spinach and tomato, serve on toast."],
+  ["Dal rice", "vg", "dal,rice,onion,tomato,oil", "Pressure-cook dal, temper with onion and tomato, serve with rice."],
+  ["Rajma chawal", "vg", "rajma,rice,onion,tomato", "Simmer rajma in onion-tomato gravy, serve with rice."],
+  ["Chana salad", "vg", "chickpea,cucumber,tomato,onion", "Toss boiled chickpeas with chopped veg, lemon and salt."],
+  ["Aloo matar with roti", "vg", "potato,peas,onion,roti,oil", "Cook potato and peas in onion masala, eat with roti."],
+  ["Quinoa veggie bowl", "vg", "quinoa,chickpea,spinach,tomato", "Cook quinoa, top with chickpeas, spinach and tomato."],
+  ["Protein oats", "v", "oats,milk,banana,peanut butter", "Cook oats in milk, top with banana and a spoon of peanut butter."],
+  ["Overnight oats", "v", "oats,curd,banana,almond", "Soak oats in curd overnight, top with banana and almonds."],
+  ["Fruit and yogurt bowl", "v", "curd,banana,apple,almond", "Layer curd with chopped fruit and crushed almonds."],
+  ["Peanut butter banana toast", "v", "bread,peanut butter,banana", "Spread peanut butter on toast and add banana slices."],
+  ["Curd rice with veg", "v", "curd,rice,cucumber,carrot", "Mix curd into soft rice, add grated carrot and cucumber."],
+  ["Veggie pasta with cheese", "v", "pasta,tomato,mushroom,cheese,oil", "Boil pasta, toss with sauteed mushroom, tomato and cheese."],
+  ["Tuna salad sandwich", "nv", "tuna,cucumber,tomato,bread", "Mix tuna with veg and stuff between toasted bread."],
+  ["Fish with potato and broccoli", "nv", "fish,potato,broccoli,oil", "Pan-sear fish, roast potato and broccoli alongside."],
+  ["Salmon quinoa bowl", "nv", "salmon,quinoa,spinach", "Bake salmon, serve on quinoa with wilted spinach."],
+  ["Mutton curry with rice", "nv", "mutton,onion,tomato,rice", "Slow-cook mutton in onion-tomato masala, serve with rice."],
+];
+const FOOD_ALIASES = { soya: ["soya", "soy"], curd: ["curd", "yogurt", "yoghurt", "dahi"], dal: ["dal", "daal", "lentil"], roti: ["roti", "chapati", "phulka"], chickpea: ["chickpea", "chana", "chole"], rajma: ["rajma", "kidney bean"], egg: ["egg"], mutton: ["mutton", "lamb"], potato: ["potato", "aloo"] };
+const DIET_BADGE = { nv: "🍗 Non-veg", v: "🥛 Vegetarian", vg: "🌱 Vegan" };
+
+function buildRecipeIdeas(ingredients) {
+  const pantry = ingredients.map((item) => item.toLowerCase());
+  const has = (key) => (FOOD_ALIASES[key] || [key]).some((word) => pantry.some((item) => item.includes(word)));
+  return RECIPES.map(([name, diet, needs, how]) => {
+    const keys = needs.split(",");
+    const have = keys.filter(has);
+    let cal = 0, p = 0, c = 0, f = 0;
+    keys.forEach((key) => { const d = NUTRITION_DB[key]; cal += d[0] * d[5] / 100; p += d[1] * d[5] / 100; c += d[2] * d[5] / 100; f += d[3] * d[5] / 100; });
+    return { name, diet, how, have, missing: keys.filter((key) => !has(key)), score: have.length / keys.length, cal: Math.round(cal), p: Math.round(p), c: Math.round(c), f: Math.round(f) };
+  }).filter((recipe) => recipe.have.length).sort((a, b) => b.score - a.score || a.missing.length - b.missing.length).slice(0, 6);
+}
 
 function buildMealIdeas(ingredients) {
   const parsed = ingredients.map((name) => {
@@ -1841,6 +1883,7 @@ function events() {
     const input = el("ingredient-input");
     const value = input.value.trim();
     if (value) {
+      el("ai-meal-results").innerHTML = "";
       value.split(/[,;\n]+/).map((part) => part.trim()).filter(Boolean).forEach((part) => {
         if (!state.ingredients.some((item) => item.toLowerCase() === part.toLowerCase())) state.ingredients.push(part);
       });
@@ -1850,9 +1893,11 @@ function events() {
     input.value = "";
   });
   el("generate-ai-meals").addEventListener("click", () => {
-    el("ai-meal-results").innerHTML = state.ingredients.length
-      ? buildMealIdeas(state.ingredients).map((meal) => '<div><strong>' + safe(meal.name) + '</strong>' + safe(meal.how) + '<span class="ai-meal-macros">' + safe(meal.items) + '<br><b>' + meal.cal + ' kcal</b> - P ' + meal.p + 'g - C ' + meal.c + 'g - F ' + meal.f + 'g' + (meal.estimated ? ' (some items estimated)' : '') + '</span></div>').join("")
-      : "<div><strong>Add ingredients first</strong>Type what you have (e.g. chicken, rice, eggs) and press +.</div>";
+    if (!state.ingredients.length) { el("ai-meal-results").innerHTML = "<div><strong>Add ingredients first</strong>Type what you have (e.g. chicken, rice, eggs) and press +.</div>"; return; }
+    const recipes = buildRecipeIdeas(state.ingredients);
+    el("ai-meal-results").innerHTML = recipes.length
+      ? recipes.map((r) => '<div><strong>' + safe(r.name) + ' <small>' + DIET_BADGE[r.diet] + '</small></strong>' + safe(r.how) + '<span class="ai-meal-macros">✅ You have: ' + safe(r.have.join(", ")) + (r.missing.length ? '<br>🛒 Add: ' + safe(r.missing.join(", ")) : '<br>🎉 You have everything!') + '<br><b>' + r.cal + ' kcal</b> - P ' + r.p + 'g - C ' + r.c + 'g - F ' + r.f + 'g (one serving)</span></div>').join("")
+      : buildMealIdeas(state.ingredients).map((meal) => '<div><strong>' + safe(meal.name) + '</strong>' + safe(meal.how) + '<span class="ai-meal-macros">' + safe(meal.items) + '<br><b>' + meal.cal + ' kcal</b> - P ' + meal.p + 'g - C ' + meal.c + 'g - F ' + meal.f + 'g</span></div>').join("");
   });
   el("cardio-start-btn").addEventListener("click", startGpsSession);
   el("cardio-pause-btn").addEventListener("click", pauseGpsSession);
