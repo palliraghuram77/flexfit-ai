@@ -8,6 +8,8 @@ FlexFit AI is a static front-end fitness web app (HTML/CSS/vanilla JS). It stays
 
 - `index.html`: Page structure and semantic content, including the sign-in/onboarding screens
 - `styles.css`: Visual design, responsive layout, and component styling
+- `workout-data.js`: Extra exercises, the split catalog and form cues (validate with `node tests/check-data.js`)
+- `schema.sql`: Supabase table and Row Level Security (the table is `app_state`)
 - `script.js`: Auth/onboarding gate, workout planner, macro calculator, progress tracker, Jiya chat, food scanner, and form behavior
 - `netlify/functions/jiya.js`: Netlify serverless function - Gemini-backed chat reply for Jiya AI
 - `netlify/functions/scan-food.js`: Netlify serverless function - Gemini vision-backed food photo analysis
@@ -35,7 +37,8 @@ After changes, verify:
 - Navigation links scroll to the correct sections.
 - Workout planner renders a new plan after form submit.
 - Macro calculator updates calories, protein, carbs, and fat.
-- Progress tracker saves and reloads values from `localStorage`.
+- Progress tracker saves and reloads values (Supabase for accounts, `sessionStorage` for guests).
+- Opening Workout shows today's session; Finish fills the progress bar to 100%; `node tests/check-data.js` passes.
 - Jiya AI replies sensibly to greetings, real questions, and nonsense input (no repeated canned line for everything).
 - Food scanner returns a real per-photo AI estimate when `/api/scan-food` is configured, and a clearly-labeled demo estimate when it isn't.
 - Mobile menu opens, closes, and does not overlap content.

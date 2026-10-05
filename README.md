@@ -4,10 +4,10 @@ FlexFit AI is a responsive, dark-themed fitness dashboard covering workouts, nut
 
 ## Features
 
-- **Sign In / Create Account** - a local demo gate (name + email, "Sign in with Google", or "Continue as Guest") that walks first-time users through profile setup before unlocking the dashboard. Signing in with a name/email or Google remembers your data on this device; signing out returns to this screen without deleting it. **Continue as Guest** is different on purpose: it always starts from a completely clean, unonboarded slate, is stored only for the current browser tab, and is discarded on sign-out or tab close - it never reads or overwrites a signed-in account's saved profile.
+- **Accounts** - real email/password and Google sign-in through Supabase Auth, with a password-strength meter on sign-up. Each user's data lives in one row of the `app_state` table, protected by Row Level Security, so it follows you to any device. First sign-in walks you through profile setup before the dashboard unlocks. **Continue as Guest** always starts from a clean slate, is kept only in the current browser tab (`sessionStorage`), and is discarded on sign-out or tab close.
 - **Light / Dark / System theme** - a toggle in the sidebar cycles System -> Light -> Dark. "System" follows your OS's color scheme automatically; the other two override it. Your choice is remembered.
 - **Dashboard** - today's calories vs. target, weekly workout count, current/target weight, fitness goal summary, today's training, today's macros, a 7-day calorie chart, and AI-style recommendations.
-- **Workout** - a weekly split with current-day highlighting and completion tracking, an "AI Regenerate" action, and a searchable/filterable exercise library with sets/reps, rest period, muscles worked, and a quick how-to dialog per exercise.
+- **Workout** - opening the page lands on **today's session**: the exercises for the day with a progress bar, a tick box per exercise, how-to and demo links, a **Finish workout** button (fills the bar to 100% and logs the session), remove/add buttons for each exercise, a form to create your own exercises, and "Suggested for you" picks tailored to your sports, goals, level and the day's focus. **Weekly Split** shows the whole week; **AI Regenerate** offers four splits (e.g. Push/Pull/Legs, Upper/Lower, Full Body, Bro Split plus sport-specific ones such as Combat Conditioning or the 10K Runner Plan), and after you choose, a plan guide with how-to and demo links for every exercise appears automatically. **Exercise Library** is searchable and filterable by muscle group. 25 splits cover all 38 supported sports.
 - **Food** - a generated daily diet plan with swappable meal alternatives, a photo-based food scanner, a nutrition log with running macro totals, and an ingredient-based "Nutrition AI" meal generator.
 - **Cardio** - activity search across categories, a live session timer, MET-based calorie calculation using your profile weight, and session history with running totals.
 - **Jiya AI** - a fitness coach chat with suggested prompts (workout plans, meal plans, protein needs, HIIT), multiple saved conversations with a history sidebar (start a new chat, switch back to any past one), each auto-titled from its first message.
@@ -19,7 +19,7 @@ FlexFit AI is a responsive, dark-themed fitness dashboard covering workouts, nut
 - HTML5 (semantic structure, accessible labels)
 - CSS3 (custom properties, responsive layout, mobile drawer navigation)
 - Vanilla JavaScript on the frontend (no frameworks, no build tools)
-- Browser `localStorage` for all app state/persistence
+- **Supabase** (Auth + Postgres with Row Level Security) for accounts and per-user app state; the browser keeps only Supabase's own session
 - **Netlify Functions** (`netlify/functions/jiya.js`, `netlify/functions/scan-food.js`) - the only server-side code, used solely to keep the Gemini API key off the client
 - **Google Gemini API** (`gemini-3.6-flash`, text + vision) for Jiya's replies and the food scanner
 - Git + Netlify for version control and deployment
@@ -33,6 +33,11 @@ No package manager or bundler is needed anywhere in this project. The two server
 ├── index.html               # Page structure - auth/onboarding + sidebar/mobile nav + all app screens
 ├── styles.css                # Visual design, theming, and responsive layout
 ├── script.js                 # State, rendering, auth/onboarding gate, and all interactive behavior
+├── workout-data.js           # Extra exercises, the split catalog (25 splits) and exercise form cues
+├── supabase-config.js        # Supabase project URL + anon (publishable) key
+├── schema.sql                # Run once in Supabase: creates the app_state table + RLS policies
+├── tests/
+│   └── check-data.js         # Validates every split exercise exists and every sport has a split (node tests/check-data.js)
 ├── netlify/
 │   └── functions/
 │       ├── jiya.js           # Netlify function - Gemini-backed Jiya chat reply
@@ -69,34 +74,21 @@ That's it - `script.js` already calls `/api/jiya` and `/api/scan-food`, `netlify
 
 ## Accounts Setup (Supabase - email/password + Google)
 
-Real accounts are powered by [Supabase](https://supabase.com) (free tier). Each user's data lives in one row of a Postgres table, protected by Row Level Security, so it follows them to any device. Without a Supabase project configured, the app still runs: the sign-in form explains this and only "Continue as Guest" (local, never saved) works.
-
-The Supabase URL and anon key are safe to put in client code - they are public by design. Security comes from the Row Level Security policies in `supabase/schema.sql`, not from hiding the key. **Never** put the `service_role` key in this project.
+Accounts are powered by [Supabase](https://supabase.com) (free tier). The Supabase URL and anon (publishable) key are safe in client code - security comes from the Row Level Security policies in `schema.sql`, not from hiding the key. **Never** put the `service_role` key in this project.
 
 1. Create a project at [supabase.com](https://supabase.com).
-2. Open **SQL Editor -> New query**, paste the contents of `supabase/schema.sql`, and run it.
-3. Open **Project Settings -> API**. Copy the **Project URL** and the **anon public** key.
-4. In `script.js`, paste them into `SUPABASE_URL` and `SUPABASE_ANON_KEY` near the top of the auth section.
-5. Open **Authentication -> URL Configuration**. Set **Site URL** to your live Netlify URL and add it (plus `http://localhost:3000` if you test locally) under **Redirect URLs**.
-6. For Google sign-in: open **Authentication -> Providers -> Google**, enable it, and paste your Google OAuth **Client ID and Client Secret**. Copy the **Callback URL** shown there, then in Google Cloud Console (your OAuth client) add it under **Authorized redirect URIs**.
-7. Optional: under **Authentication -> Providers -> Email**, turn off "Confirm email" while testing so sign-ups work instantly.
-8. Commit and push - Netlify redeploys automatically.
+2. Open **SQL Editor -> New query**, paste the contents of `schema.sql`, and run it. It creates the `app_state` table (one row per user) with policies so users can only read and write their own row.
+3. Open **Project Settings -> API** and copy the **Project URL** and the **anon / publishable** key into `supabase-config.js`.
+4. Open **Authentication -> URL Configuration**. Set **Site URL** to your live Netlify URL and add it (plus `http://localhost:3000` if you test locally) under **Redirect URLs**.
+5. For Google sign-in: **Authentication -> Providers -> Google** - enable it and paste your Google OAuth Client ID and Secret, then add the Callback URL shown there to your Google Cloud OAuth client's Authorized redirect URIs.
+6. Optional: under **Authentication -> Providers -> Email**, turn off "Confirm email" while testing.
+7. Commit and push - Netlify redeploys automatically.
 
-## How `localStorage` Is Used
+Without a Supabase project configured the app still runs: the sign-in form explains this and only **Continue as Guest** works.
 
-All app state for a signed-in (name/email or Google) user lives under a single `localStorage` key, `flexfit-ai-dashboard`, as one JSON object containing:
+## How Data Is Stored
 
-- session (signed in or not, and a display name) and an `onboarded` flag
-- profile (sports, goals, age, height, weight, target weight, fitness level)
-- calculated calorie/macro targets
-- logged meals, cardio sessions, completed workouts, and weight history
-- saved ingredients for the AI meal generator
-- `jiyaChats`: an array of saved Jiya conversations (id, title, created date, messages) plus `activeChatId` for which one is open
-- a few UI flags (e.g. whether a diet plan has been generated)
-
-State is loaded once on startup and merged against sensible defaults, so missing or corrupted `localStorage` data never crashes the app - it falls back to defaults instead. Every user action re-saves the whole state object immediately, so a page refresh always restores where you left off. An older single flat `chat` array (pre chat-history) is migrated automatically into one `jiyaChats` entry the first time it's loaded.
-
-**Continue as Guest** uses a separate, `sessionStorage`-backed key (`flexfit-ai-dashboard-guest-session`) instead of the `localStorage` one above. It always starts from `defaultState()` - unonboarded, no profile, no chats - so a guest never sees (or overwrites) a signed-in user's saved data, on this device or any other. It's cleared on sign-out or when the tab closes.
+All app state (profile, targets, meals, cardio sessions, completed workouts, weight history, Jiya chats, your chosen workout plan, per-day exercise edits, custom exercises and a change history) is one JSON object saved to the signed-in user's `app_state` row, debounced about half a second after each change. State is merged against sensible defaults on load, so missing or older data never crashes the app. Guests use `sessionStorage` instead (key `flexfit-ai-dashboard-guest-session`) and never read or overwrite a real account's data.
 
 ## Limitations
 
@@ -104,11 +96,10 @@ State is loaded once on startup and merged against sensible defaults, so missing
 - **Food Scanner** - same pattern: a working `/api/scan-food` returns a real per-photo Gemini vision estimate (items, grams, calories). Without it, you get a clearly-labeled fixed demo estimate, explicitly marked as not a real analysis of your photo.
 - **API key exposure trade-off** - the Gemini key is kept server-side specifically to avoid the "key visible in every visitor's browser" problem a pure static site would have. Still use a key with no billing account attached (Gemini's free tier) as a second layer of safety in case the Netlify-side protection is ever misconfigured.
 - **"AI Regenerate" (workout) / "Generate Plan" (diet)** - still produce varied, goal-aware results using local logic, not a hosted generative model.
-- **Sign In / Create Account** - a local-only demo gate. Nothing is sent to a server for auth; it just marks a session active in `localStorage`. "Sign in with Google" uses Google's own client-side sign-in widget and decodes the returned token in the browser (no server-side verification) - fine for a demo, not a substitute for real backend-verified auth.
 
 ## Future Improvements
 
 - Extend the Gemini integration to generate full workout/diet plans, not just chat and photo scanning.
-- Add data export/import so progress isn't tied to a single browser's storage.
+- Add data export/import so users can back up their progress.
 - Add unit tests around the target/macro calculations.
 - Add basic rate-limiting in the serverless functions to further protect the Gemini quota.

@@ -143,20 +143,19 @@
         </section>
 
         <section class="page" id="workout-page" data-page-view="workout" hidden>
-          <div class="page-heading"><h1>Workout</h1><p>Your weekly split and a curated exercise library.</p></div>
+          <div class="page-heading"><h1>Workout</h1><p>Today's session, your weekly split and a curated exercise library.</p></div>
           <div class="tabs" role="tablist" aria-label="Workout views">
-            <button class="tab active" type="button" role="tab" aria-selected="true" data-tab-group="workout" data-tab="split">Weekly Split</button>
+            <button class="tab active" type="button" role="tab" aria-selected="true" data-tab-group="workout" data-tab="today">Today</button>
+            <button class="tab" type="button" role="tab" aria-selected="false" data-tab-group="workout" data-tab="split">Weekly Split</button>
             <button class="tab" type="button" role="tab" aria-selected="false" data-tab-group="workout" data-tab="library">Exercise Library</button>
           </div>
-          <div class="tab-panel active" data-panel-group="workout" data-panel="split">
-            <div class="section-toolbar"><p>Tailored to: <strong id="split-goal">general fitness</strong></p><button class="outline-button" type="button" id="regenerate-workout">AI Regenerate</button></div>
+          <div class="tab-panel active" data-panel-group="workout" data-panel="today"><div class="session-view" id="session-view"></div></div>
+          <div class="tab-panel" data-panel-group="workout" data-panel="split" hidden>
+            <div class="section-toolbar"><p>Plan: <strong id="split-name">Weekly plan</strong> &middot; Tailored to: <strong id="split-goal">general fitness</strong></p><button class="outline-button" type="button" id="regenerate-workout">AI Regenerate</button></div>
             <div class="week-grid" id="week-grid"></div>
+            <div class="plan-guide" id="plan-guide"></div>
           </div>
           <div class="tab-panel" data-panel-group="workout" data-panel="library" hidden>
-            <div class="day-view-banner" id="day-view-banner" hidden>
-              <p>Showing exercises for <strong id="day-view-label"></strong></p>
-              <button class="outline-button" type="button" id="day-view-exit">← Back to full library</button>
-            </div>
             <div class="library-tools" id="library-tools">
               <label class="search-field"><span class="sr-only">Search exercises</span><input type="search" id="exercise-search" placeholder="Search exercises..." /></label>
               <div class="filter-row" id="exercise-filters" aria-label="Exercise muscle group filters"></div>
@@ -315,6 +314,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
+    <script src="workout-data.js"></script>
     <script src="script.js"></script>
   </body>
 </html>

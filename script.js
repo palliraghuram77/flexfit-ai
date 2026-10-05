@@ -162,7 +162,10 @@ const EXERCISES = [
   ["Sled Push","Full Body","intermediate","4 x 20m","90s rest","quads | glutes | core | cardio"],
   ["Battle Ropes","Full Body","beginner","4 x 30s","45s rest","shoulders | core | cardio"],
 ];
-
+// Extra exercises (and the split catalog) live in workout-data.js.
+if (window.FLEXFIT_DATA) {
+  window.FLEXFIT_DATA.extraExercises.forEach((item) => { if (!EXERCISES.some((e) => e[0] === item[0])) EXERCISES.push(item); });
+}
 
 let state = defaultState();
 let exerciseGroup = "Chest";
@@ -211,6 +214,11 @@ function defaultState() {
     activeChatId: null,
     dietGenerated: false,
     workoutVersion: 0,
+    workoutPlan: null,
+    dayExercises: {},
+    sessionProgress: {},
+    customExercises: [],
+    history: [],
     recommendations: false,
   };
 }
@@ -245,6 +253,11 @@ function mergeState(fallback, saved) {
     weightHistory: Array.isArray(saved.weightHistory) ? saved.weightHistory : [],
     ingredients: Array.isArray(saved.ingredients) ? saved.ingredients : [],
     jiyaChats: Array.isArray(saved.jiyaChats) ? saved.jiyaChats.filter((chat) => chat && Array.isArray(chat.messages)) : [],
+    customExercises: Array.isArray(saved.customExercises) ? saved.customExercises.filter((e) => e && typeof e.name === "string") : [],
+    history: Array.isArray(saved.history) ? saved.history : [],
+    dayExercises: saved.dayExercises && typeof saved.dayExercises === "object" && !Array.isArray(saved.dayExercises) ? saved.dayExercises : {},
+    sessionProgress: saved.sessionProgress && typeof saved.sessionProgress === "object" && !Array.isArray(saved.sessionProgress) ? saved.sessionProgress : {},
+    workoutPlan: saved.workoutPlan && typeof saved.workoutPlan.splitId === "string" ? saved.workoutPlan : null,
   };
 
   // Migrate the old single flat "chat" array (pre chat-history feature) into one saved conversation.
@@ -368,6 +381,7 @@ function changePage(page, hash = true) {
   if (hash && window.location.hash !== "#" + valid) window.location.hash = valid;
   document.body.classList.remove("menu-open");
   el("menu-button").setAttribute("aria-expanded", "false");
+  if (valid === "workout") openTodaySession(); // opening Workout lands on today's session
   el("main-content").scrollIntoView({ behavior: "instant", block: "start" });
 }
 
@@ -412,6 +426,10 @@ function renderDashboard() {
   el("macro-carbs").textContent = Math.round(totals.carbs) + "/" + target.carbs + "g";
   el("macro-fat").textContent = Math.round(totals.fat) + "/" + target.fat + "g";
   el("macro-empty").hidden = totals.calories > 0;
+  const todaySession = weekPlan()[todayIndex()];
+  el("today-training-copy").textContent = todaySession[4]
+    ? "Rest day today - recover, stretch and walk."
+    : "Today: " + todaySession[1] + " (" + todaySession[5].length + " exercises)." + (sessionComplete(todayIndex()) ? " Completed - nice work." : "");
 
   const values = [];
   const labels = [];
@@ -436,7 +454,7 @@ function renderDashboard() {
   }
 }
 
-function weekPlan() {
+function legacyWeekPlan() {
   const sports = state.profile.sports || [];
   const goals  = state.profile.goals  || [];
   const REST   = (day) => [day, "Rest & Recovery", "Recovery day — stretch, walk, sleep well.", "", true];
@@ -660,7 +678,8 @@ function exercisesForSession(session) {
   const sessionGroup = session[3];
   const description = session[2];
   if (!description) return [];
-  const byName = (name) => EXERCISES.find((item) => item[0] === name);
+  const LIB = libraryExercises();
+  const byName = (name) => LIB.find((item) => item[0] === name);
   const matched = [];
   const add = (item) => { if (item && !matched.includes(item)) matched.push(item); };
   const levelOrder = { beginner: 0, intermediate: 1, advanced: 2 };
@@ -674,7 +693,7 @@ function exercisesForSession(session) {
 
     // 1) Bare muscle word -> two exercises for that muscle, closest to the user's level.
     if (termWords.length === 1 && MUSCLE_WORDS[term]) {
-      EXERCISES.filter((item) => item[1] === MUSCLE_WORDS[term])
+      LIB.filter((item) => item[1] === MUSCLE_WORDS[term])
         .sort((a, b) => Math.abs(levelOrder[a[2]] - userLevel) - Math.abs(levelOrder[b[2]] - userLevel))
         .slice(0, 2).forEach(add);
       return;
@@ -684,7 +703,7 @@ function exercisesForSession(session) {
     // 3) Otherwise score every exercise in the WHOLE library (not just this day's group).
     let best = null;
     let bestScore = 0;
-    EXERCISES.forEach((item) => {
+    LIB.forEach((item) => {
       if (matched.includes(item)) return;
       const nameWords = normalizeExerciseText(item[0]).split(" ").map(singular);
       const nameKey = nameWords.join(" ");
@@ -707,110 +726,471 @@ function exercisesForSession(session) {
   return matched;
 }
 
-// Which specific day's exercises the library should show, or null for normal browsing.
-let dayViewExercises = null;
-let dayViewLabel = "";
+// ───────── Workout: plans, today's session, library ─────────
+const WEEK_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const LEVEL_RANK = { beginner: 0, intermediate: 1, advanced: 2, elite: 3 };
+let sessionDayIndex = null;   // null = today's session
+let guideOpenAll = false;
+const lastSessionPct = {};
 
+function todayIndex() { return (new Date().getDay() + 6) % 7; } // Monday = 0
+
+function libraryExercises() {
+  const custom = (state.customExercises || []).map((e) => [e.name, e.group, e.level, e.sets, e.rest, e.muscles]);
+  return EXERCISES.concat(custom);
+}
+function findExercise(name) { return libraryExercises().find((item) => item[0] === name); }
+function isCustomExercise(name) { return (state.customExercises || []).some((e) => e.name === name); }
+function demoUrl(name) { return "https://www.youtube.com/results?search_query=" + encodeURIComponent(name + " exercise form"); }
+
+// Every change the user makes is recorded here; the History page (next batch) reads it.
+function logChange(type, text) {
+  state.history.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ts: Date.now(), date: today(), type, text });
+  if (state.history.length > 500) state.history = state.history.slice(-500);
+}
+
+// ── Splits: recommended by sport, goal and level ──
+function splitById(id) { return window.FLEXFIT_DATA ? window.FLEXFIT_DATA.splits.find((sp) => sp.id === id) : null; }
+function sportOverlap(sp) { return sp.sports.filter((s) => state.profile.sports.includes(s)); }
+function goalOverlap(sp) { return sp.goals.filter((g) => state.profile.goals.includes(g)); }
+function scoreSplit(sp) {
+  const level = state.profile.level;
+  return sportOverlap(sp).length * 4 + goalOverlap(sp).length * 2 + (level ? (sp.levels.includes(level) ? 2 : -3) : 0);
+}
+function splitReason(sp) {
+  const sports = sportOverlap(sp), goals = goalOverlap(sp);
+  if (sports.length) return "Built for " + sports.slice(0, 2).join(" & ");
+  if (goals.length) return "Matches goal: " + goals[0];
+  return sp.levels.includes(state.profile.level) ? "Suits " + state.profile.level + " level" : "General option";
+}
+// Up to 4 options: the best sport-specific splits first, then general ones (PPL, Upper/Lower, Full Body, Bro split...).
+// "offset" rotates through the candidates so "Show different options" gives fresh choices.
+function recommendSplits(offset = 0) {
+  const D = window.FLEXFIT_DATA;
+  if (!D) return [];
+  const ranked = D.splits.slice().sort((a, b) => scoreSplit(b) - scoreSplit(a));
+  const sportList = ranked.filter((sp) => sp.sports.length && sportOverlap(sp).length);
+  const generalIds = ["full-body-3", "upper-lower", "ppl", "bro-split", "hybrid-recomp", "glute-focus", "rebuild"];
+  const generalList = ranked.filter((sp) => !sportList.includes(sp) && generalIds.includes(sp.id));
+  const pick = (list, n, off) => Array.from({ length: Math.min(n, list.length) }, (_, i) => list[(off + i) % list.length]);
+  const chosen = pick(sportList, Math.min(2, sportList.length), offset * 2);
+  pick(generalList, 4 - chosen.length, offset * (4 - chosen.length)).forEach((sp) => { if (!chosen.includes(sp)) chosen.push(sp); });
+  ranked.forEach((sp) => { if (chosen.length < 4 && !chosen.includes(sp)) chosen.push(sp); });
+  return chosen.slice(0, 4);
+}
+function currentSplit() {
+  if (!window.FLEXFIT_DATA) return null;
+  return splitById(state.workoutPlan && state.workoutPlan.splitId) || recommendSplits(0)[0] || null;
+}
+
+// The week as [day, title, description, group, isRest, exerciseNames]. User edits override the split's defaults.
+function weekPlan() {
+  const split = currentSplit();
+  if (!split) {
+    return legacyWeekPlan().map((s) => [s[0], s[1], s[2], s[3], s[4], Array.isArray(state.dayExercises[s[0]]) ? state.dayExercises[s[0]] : (s[4] ? [] : exercisesForSession(s).map((e) => e[0]))]);
+  }
+  return split.days.map((d) => {
+    const edited = Array.isArray(state.dayExercises[d[0]]);
+    const names = edited ? state.dayExercises[d[0]] : d[5];
+    const desc = d[4] ? d[2] : (names.length ? names.slice(0, 3).join(", ") + (names.length > 3 ? " +" + (names.length - 3) + " more" : "") : "No exercises yet - add some");
+    return [d[0], d[1], desc, d[3], d[4], names.slice()];
+  });
+}
+
+// ── Session progress & completion (same id as the weekly grid, so both always agree) ──
+function sessionKey(index) { return today() + "-" + index; }
+function doneNames(index) { return state.sessionProgress[sessionKey(index)] || []; }
+function sessionComplete(index) { return state.completedWorkouts.some((item) => item.id === sessionKey(index)); }
+function pruneProgress() {
+  const cutoff = dateBefore(14);
+  Object.keys(state.sessionProgress).forEach((key) => { if (key.slice(0, 10) < cutoff) delete state.sessionProgress[key]; });
+}
+function refreshWorkoutViews() {
+  renderWorkout();
+  renderDashboard();
+  renderProgress();
+}
+function setSessionComplete(index, complete) {
+  const s = weekPlan()[index];
+  const id = sessionKey(index);
+  state.completedWorkouts = state.completedWorkouts.filter((item) => item.id !== id);
+  if (complete) {
+    state.completedWorkouts.push({ id, date: today(), title: s[1] });
+    state.sessionProgress[id] = s[5].slice();
+    logChange("complete", "Completed " + s[0] + " - " + s[1]);
+    toast("Workout logged. Great work.");
+  } else {
+    state.sessionProgress[id] = [];
+    logChange("uncomplete", "Marked " + s[0] + " - " + s[1] + " as not completed");
+    toast("Workout marked incomplete.");
+  }
+  pruneProgress();
+  saveState();
+  refreshWorkoutViews();
+}
+function toggleExerciseDone(index, name) {
+  const key = sessionKey(index);
+  const list = doneNames(index).slice();
+  const at = list.indexOf(name);
+  if (at >= 0) list.splice(at, 1); else list.push(name);
+  state.sessionProgress[key] = list;
+  const total = weekPlan()[index][5].length;
+  if (sessionComplete(index) && list.length < total) {
+    state.completedWorkouts = state.completedWorkouts.filter((item) => item.id !== key); // un-ticking reopens the session
+  }
+  pruneProgress();
+  saveState();
+  refreshWorkoutViews();
+  const box = Array.from(document.querySelectorAll("#session-view [data-done]")).find((node) => node.dataset.done === name);
+  if (box) box.focus(); // re-rendering replaces the checkbox, so hand keyboard focus back to it
+}
+
+// ── Editing a day's exercises ──
+function setDayExercises(index, names, message) {
+  const s = weekPlan()[index];
+  state.dayExercises[s[0]] = names;
+  const key = sessionKey(index);
+  state.sessionProgress[key] = (state.sessionProgress[key] || []).filter((n) => names.includes(n));
+  logChange("exercise", message);
+  saveState();
+  refreshWorkoutViews();
+}
+function addToSession(index, name) {
+  const s = weekPlan()[index];
+  if (s[4]) { toast(s[0] + " is a rest day - pick a training day first."); return false; }
+  if (s[5].includes(name)) { toast(name + " is already in " + s[0] + "'s session."); return false; }
+  setDayExercises(index, s[5].concat(name), "Added " + name + " to " + s[0] + " (" + s[1] + ")");
+  toast("Added " + name + ".");
+  return true;
+}
+function removeFromSession(index, name) {
+  const s = weekPlan()[index];
+  setDayExercises(index, s[5].filter((n) => n !== name), "Removed " + name + " from " + s[0] + " (" + s[1] + ")");
+  toast("Removed " + name + ".");
+}
+function resetDay(index) {
+  const s = weekPlan()[index];
+  delete state.dayExercises[s[0]];
+  state.sessionProgress[sessionKey(index)] = [];
+  logChange("exercise", "Reset " + s[0] + " to the plan's default exercises");
+  saveState();
+  refreshWorkoutViews();
+  toast("Restored the plan's exercises for " + s[0] + ".");
+}
+
+// ── Smarter suggestions: tailored to the day's focus, your sports, goals and level ──
+const SPORT_FOCUS = [
+  [["Boxing", "Kickboxing", "Martial Arts", "Brazilian Jiu-Jitsu", "Wrestling"], ["Combat", "Athletic", "Core"]],
+  [["Running", "Trail Running", "Sprinting"], ["Running", "Athletic", "Endurance"]],
+  [["Cycling", "Mountain Biking", "Triathlon", "Rowing"], ["Endurance", "Quads"]],
+  [["Swimming"], ["Swimming", "Back"]],
+  [["Yoga"], ["Yoga", "Mobility"]], [["Pilates"], ["Pilates", "Core"]],
+  [["Calisthenics", "Gymnastics"], ["Calisthenics", "Core"]],
+  [["Rock Climbing", "Hiking"], ["Climbing", "Endurance"]],
+  [["Football", "Basketball", "Tennis", "Badminton", "Table Tennis", "Volleyball", "Cricket", "Baseball", "Golf", "Rugby", "Hockey", "Skiing", "Snowboarding", "Surfing", "Skateboarding"], ["Athletic", "Mobility", "Core"]],
+  [["Dance"], ["Dance", "Mobility"]],
+  [["Bodybuilding", "Powerlifting", "CrossFit"], ["Chest", "Back", "Quads", "Full Body"]],
+];
+const GOAL_FOCUS = {
+  "Improve mobility": ["Mobility", "Yoga", "Pilates"], "Return from injury": ["Mobility", "Pilates"],
+  "Build endurance": ["Endurance", "Running"], "Run a 10K": ["Running", "Endurance"],
+  "Boxing conditioning": ["Combat"], "Lean bulk": ["Chest", "Back", "Quads"],
+  "Increase strength while lean": ["Quads", "Back", "Chest"], "Body recomposition": ["Full Body", "Glutes"],
+};
+function exerciseRelevance(item, sessionGroup, sessionMuscles) {
+  const profile = state.profile;
+  let score = 0, reason = "";
+  if (item[1] === sessionGroup) { score += 4; reason = "Targets today's focus (" + sessionGroup + ")"; }
+  const muscles = item[5].split("|").map((m) => m.trim());
+  if (muscles.some((m) => sessionMuscles.has(m))) score += 2;
+  const sportHit = SPORT_FOCUS.find(([sports, groups]) => groups.includes(item[1]) && sports.some((s) => profile.sports.includes(s)));
+  if (sportHit) { score += 2.5; if (!reason) reason = "Supports your " + sportHit[0].find((s) => profile.sports.includes(s)); }
+  const goalHit = profile.goals.find((g) => (GOAL_FOCUS[g] || []).includes(item[1]));
+  if (goalHit) { score += 1.5; if (!reason) reason = "Supports your goal: " + goalHit; }
+  const diff = (LEVEL_RANK[item[2]] ?? 0) - (LEVEL_RANK[profile.level] ?? 0);
+  score += diff > 0 ? -2 * diff : 0.5;
+  return { score, reason: reason || "Good all-round option" };
+}
+function suggestExercises(index, limit = 4) {
+  const s = weekPlan()[index];
+  const sessionMuscles = new Set();
+  s[5].forEach((name) => { const it = findExercise(name); if (it) it[5].split("|").forEach((m) => sessionMuscles.add(m.trim())); });
+  return libraryExercises().filter((item) => !s[5].includes(item[0]))
+    .map((item) => ({ item, ...exerciseRelevance(item, s[3], sessionMuscles) }))
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score).slice(0, limit);
+}
+
+// ── Today's session view ──
+function sessionRowHtml(index, name, checked) {
+  const item = findExercise(name);
+  if (!item) return "";
+  return '<article class="session-exercise ' + (checked ? "done" : "") + '">' +
+    '<label class="se-check"><input type="checkbox" data-done="' + safe(name) + '" ' + (checked ? "checked" : "") + ' /><span class="sr-only">Mark ' + safe(name) + ' as done</span></label>' +
+    '<div class="se-main"><h3>' + safe(name) + '</h3><div class="tag-row"><span class="tag accent">' + safe(item[2]) + '</span><span class="tag">' + safe(item[3]) + '</span><span class="tag">' + safe(item[4]) + '</span></div><p>' + safe(item[5]) + '</p>' +
+    '<div class="exercise-actions"><button type="button" data-exercise-info="' + safe(name) + '">How to do it</button>' +
+    '<a href="' + demoUrl(name) + '" target="_blank" rel="noopener">Watch demo</a>' +
+    '<button type="button" class="remove-ex" data-remove-ex="' + safe(name) + '">Remove</button></div></div></article>';
+}
+
+function renderSession() {
+  const root = el("session-view");
+  if (!root) return;
+  const plan = weekPlan();
+  const tIndex = todayIndex();
+  const index = sessionDayIndex == null ? tIndex : sessionDayIndex;
+  const s = plan[index];
+  const pills = plan.map((p, i) => '<button type="button" class="day-pill ' + (i === index ? "active" : "") + (i === tIndex ? " is-today" : "") + '" data-session-day="' + i + '" aria-pressed="' + (i === index) + '" aria-label="' + p[0] + (p[4] ? " (rest day)" : "") + '">' + p[0].slice(0, 3) + (p[4] ? "<small>rest</small>" : "") + '</button>').join("");
+  const split = currentSplit();
+  let html = '<div class="session-head"><div><span class="day-label">' + s[0] + '</span>' + (index === tIndex ? '<span class="today-label">Today</span>' : "") +
+    '<h2>' + safe(s[1]) + '</h2><p class="muted-line">' + (split ? safe(split.name) + " plan" : "Weekly plan") + '</p></div>' +
+    '<button class="outline-button" type="button" id="session-to-split">&larr; Weekly split</button></div><div class="day-pills" role="group" aria-label="Choose a day">' + pills + '</div>';
+
+  if (s[4]) {
+    const next = plan.findIndex((p, i) => i > index && !p[4]);
+    const target = next >= 0 ? next : plan.findIndex((p) => !p[4]);
+    html += '<div class="session-rest"><h3>Rest &amp; recovery</h3><p>No training scheduled. Walk, stretch and sleep well - your muscles grow while you recover.</p>' +
+      (target >= 0 ? '<button class="primary-button" type="button" data-session-day="' + target + '">See ' + plan[target][0] + "'s session &rarr;</button>" : "") + '</div>';
+    root.innerHTML = html;
+    wireSession(root, index);
+    return;
+  }
+
+  const names = s[5];
+  const complete = sessionComplete(index);
+  const done = doneNames(index).filter((n) => names.includes(n));
+  const count = complete ? names.length : done.length;
+  const pct = names.length ? Math.round(count / names.length * 100) : 0;
+  const key = sessionKey(index);
+  const from = lastSessionPct[key] ?? 0;
+  html += '<div class="session-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '" aria-label="Session progress">' +
+    '<div class="sp-track"><i class="sp-fill" id="sp-fill" style="width:' + from + '%"></i></div><span class="sp-label" id="sp-label">' + count + " of " + names.length + " done &middot; " + pct + '%</span></div>';
+  html += names.length ? '<div class="session-list">' + names.map((n) => sessionRowHtml(index, n, complete || done.includes(n))).join("") + '</div>'
+    : '<div class="empty-state">No exercises in this session. Add some from the library below.</div>';
+
+  const edited = Array.isArray(state.dayExercises[s[0]]);
+  html += '<div class="session-tools"><button class="outline-button" type="button" id="open-add-exercise">+ Add from library</button><button class="outline-button" type="button" id="open-custom-exercise">+ Create your own exercise</button>' +
+    (edited ? '<button class="link-button" type="button" id="reset-day">Reset to plan default</button>' : "") + '</div>';
+
+  const suggestions = suggestExercises(index);
+  if (suggestions.length) {
+    html += '<div class="suggest-box"><h3>Suggested for you</h3><div class="suggest-row">' + suggestions.map((e) =>
+      '<button type="button" class="suggest-chip" data-add-name="' + safe(e.item[0]) + '"><b>+ ' + safe(e.item[0]) + '</b><small>' + safe(e.reason) + '</small></button>').join("") + '</div></div>';
+  }
+  html += '<div class="finish-bar"><button type="button" id="finish-session" class="' + (complete ? "outline-button finished" : "primary-button") + '"' + (names.length ? "" : " disabled") + '>' +
+    (complete ? "&#10003; Completed - tap to undo" : "Finish workout") + '</button></div>';
+  root.innerHTML = html;
+  wireSession(root, index);
+
+  const fill = el("sp-fill");
+  if (fill) {
+    lastSessionPct[key] = pct;
+    requestAnimationFrame(() => requestAnimationFrame(() => { fill.style.width = pct + "%"; }));
+  }
+}
+
+function wireSession(root, index) {
+  root.querySelectorAll("[data-session-day]").forEach((b) => b.addEventListener("click", () => { sessionDayIndex = num(b.dataset.sessionDay); renderSession(); }));
+  root.querySelectorAll("[data-done]").forEach((b) => b.addEventListener("change", () => toggleExerciseDone(index, b.dataset.done)));
+  root.querySelectorAll("[data-remove-ex]").forEach((b) => b.addEventListener("click", () => removeFromSession(index, b.dataset.removeEx)));
+  root.querySelectorAll("[data-add-name]").forEach((b) => b.addEventListener("click", () => addToSession(index, b.dataset.addName)));
+  root.querySelectorAll("[data-exercise-info]").forEach((b) => b.addEventListener("click", () => openExerciseInfo(b.dataset.exerciseInfo)));
+  const on = (id, fn) => { const node = el(id); if (node) node.addEventListener("click", fn); };
+  on("session-to-split", () => changeTab("workout", "split"));
+  on("open-add-exercise", () => openAddExerciseModal(index));
+  on("open-custom-exercise", () => openCustomExerciseModal(index));
+  on("reset-day", () => resetDay(index));
+  on("finish-session", () => {
+    setSessionComplete(index, !sessionComplete(index));
+    const again = el("finish-session");
+    if (again) again.focus();
+  });
+}
+
+function openTodaySession() {
+  sessionDayIndex = null;
+  renderSession();
+  changeTab("workout", "today");
+}
+
+// ── Weekly split ──
 function renderWorkout() {
   const plan = weekPlan();
+  const split = currentSplit();
   el("split-goal").textContent = state.profile.goals[0] || "general fitness";
+  el("split-name").textContent = split ? split.name : "Weekly plan";
+  const realToday = todayIndex();
   el("week-grid").innerHTML = plan.map((session, index) => {
-    const id = today() + "-" + index;
-    const complete = state.completedWorkouts.some((item) => item.id === id);
+    const complete = sessionComplete(index);
     const rest = session[4];
-    const FULL_DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-    const realToday = FULL_DAYS[new Date().getDay()];
-    const isToday = session[0] === realToday;
+    const isToday = index === realToday;
     const todayLabel = isToday ? '<span class="today-label">Today</span>' : "";
     const action = rest ? "" : '<button class="outline-button view-exercises" type="button" data-day-index="' + index + '">View Exercises</button>';
     const completeButton = rest ? "" : '<button class="complete-button ' + (complete ? "done" : "") + '" type="button" data-workout="' + index + '">' + (complete ? "Completed" : "Complete") + '</button>';
-    return '<article class="week-card ' + (isToday ? "today" : "") + '">' + completeButton + '<span class="day-label">' + session[0] + '</span>' + todayLabel + '<h3>' + session[1] + '</h3><p>' + session[2] + '</p>' + action + '</article>';
+    return '<article class="week-card ' + (isToday ? "today" : "") + '">' + completeButton + '<span class="day-label">' + session[0] + '</span>' + todayLabel + '<h3>' + safe(session[1]) + '</h3><p>' + safe(session[2]) + '</p>' + action + '</article>';
   }).join("");
   all("[data-workout]").forEach((button) => button.addEventListener("click", () => {
     const index = num(button.dataset.workout);
-    const id = today() + "-" + index;
-    if (state.completedWorkouts.some((item) => item.id === id)) {
-      state.completedWorkouts = state.completedWorkouts.filter((item) => item.id !== id);
-      toast("Workout marked incomplete.");
-    } else {
-      state.completedWorkouts.push({ id, date: today(), title: plan[index][1] });
-      toast("Workout logged. Great work.");
-    }
-    saveState();
-    renderWorkout();
-    renderDashboard();
-    renderProgress();
+    setSessionComplete(index, !sessionComplete(index));
+    const again = document.querySelector('[data-workout="' + index + '"]');
+    if (again) again.focus();
   }));
   all(".view-exercises").forEach((button) => button.addEventListener("click", () => {
-    const index = num(button.dataset.dayIndex);
-    const session = plan[index];
-    const matches = exercisesForSession(session);
-    if (matches.length) {
-      // Real day-specific view: show exactly this day's assigned exercises, not a whole muscle group.
-      dayViewExercises = matches;
-      dayViewLabel = session[0] + " — " + session[1];
-      exerciseGroup = session[3] || "Chest";
-    } else {
-      // No confident match (e.g. a very free-form description) - fall back to browsing the group.
-      dayViewExercises = null;
-      exerciseGroup = EXERCISES.some((item) => item[1] === session[3]) ? session[3] : "Chest";
-    }
-    changeTab("workout", "library");
-    renderExercises();
+    sessionDayIndex = num(button.dataset.dayIndex);
+    renderSession();
+    changeTab("workout", "today");
   }));
+  renderPlanGuide();
+  renderSession();
 }
 
+// How-to and demo links for every exercise in the chosen plan.
+function renderPlanGuide() {
+  const node = el("plan-guide");
+  if (!node) return;
+  const plan = weekPlan().filter((s) => !s[4]);
+  node.innerHTML = '<h3>Your plan guide</h3><p class="muted-line">Open any day for form tips and demo videos for every exercise.</p>' + plan.map((s, i) =>
+    '<details class="guide-day" ' + (guideOpenAll || i === 0 ? "open" : "") + '><summary><strong>' + s[0] + '</strong> &ndash; ' + safe(s[1]) + ' <span>' + s[5].length + ' exercises</span></summary><ul>' +
+    s[5].map((name) => { const it = findExercise(name); return it ? '<li><span><b>' + safe(name) + '</b><small>' + safe(it[3]) + ' &middot; ' + safe(it[4]) + '</small></span><span class="guide-links"><button type="button" data-exercise-info="' + safe(name) + '">How-to</button><a href="' + demoUrl(name) + '" target="_blank" rel="noopener">Demo video</a></span></li>' : ""; }).join("") +
+    '</ul></details>').join("");
+  node.querySelectorAll("[data-exercise-info]").forEach((b) => b.addEventListener("click", () => openExerciseInfo(b.dataset.exerciseInfo)));
+}
+
+// ── Split chooser (AI Regenerate) ──
+function openSplitChooser(offset = 0) {
+  const options = recommendSplits(offset);
+  const current = currentSplit();
+  el("modal-backdrop").hidden = false;
+  document.querySelector(".modal").classList.add("wide");
+  el("modal-title").textContent = "Choose your split";
+  el("modal-form").innerHTML = '<p class="modal-copy">Picked for your sports, goals and level. Choosing one replaces your weekly plan.</p><div class="split-options">' + options.map((sp) => {
+    const days = sp.days.filter((d) => !d[4]).length;
+    return '<article class="split-option ' + (current && current.id === sp.id ? "current" : "") + '"><div><h3>' + safe(sp.name) + '</h3><p>' + safe(sp.blurb) + '</p><div class="tag-row"><span class="tag accent">' + days + ' days / week</span><span class="tag">' + safe(splitReason(sp)) + '</span></div></div>' +
+      '<button type="button" class="' + (current && current.id === sp.id ? "outline-button" : "primary-button") + '" data-choose-split="' + sp.id + '">' + (current && current.id === sp.id ? "Current plan" : "Use this plan") + '</button></article>';
+  }).join("") + '</div><button type="button" class="outline-button" id="more-splits">Show different options</button>';
+  el("modal-form").onsubmit = (event) => event.preventDefault();
+  all("[data-choose-split]").forEach((b) => b.addEventListener("click", () => chooseSplit(b.dataset.chooseSplit)));
+  el("more-splits").addEventListener("click", () => openSplitChooser(offset + 1));
+}
+function chooseSplit(id) {
+  const sp = splitById(id);
+  if (!sp) return;
+  const previous = currentSplit();
+  state.workoutPlan = { splitId: sp.id, chosenAt: Date.now() };
+  state.dayExercises = {};
+  state.workoutVersion += 1;
+  logChange("plan", "Changed plan to " + sp.name + (previous && previous.id !== sp.id ? " (was " + previous.name + ")" : ""));
+  saveState();
+  closeModal();
+  sessionDayIndex = null;
+  guideOpenAll = true;
+  refreshWorkoutViews();
+  changeTab("workout", "split");
+  toast(sp.name + " is now your plan. Form tips and demo links are below.");
+  const guide = el("plan-guide");
+  if (guide) guide.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// ── Add from library / custom exercise ──
+function libraryGroups() {
+  const order = ["Chest", "Back", "Shoulders", "Biceps", "Triceps", "Quads", "Hamstrings", "Glutes", "Core", "Calves", "Full Body"];
+  const present = [...new Set(libraryExercises().map((e) => e[1]))];
+  return order.filter((g) => present.includes(g)).concat(present.filter((g) => !order.includes(g)).sort());
+}
+function openAddExerciseModal(index) {
+  const s = weekPlan()[index];
+  el("modal-backdrop").hidden = false;
+  document.querySelector(".modal").classList.add("wide");
+  el("modal-title").textContent = "Add exercise - " + s[0];
+  el("modal-form").innerHTML = '<label>Search<input id="picker-search" type="search" placeholder="Search exercises or muscles..." /></label>' +
+    '<label>Muscle group<select id="picker-group"><option value="">All groups</option>' + libraryGroups().map((g) => '<option>' + safe(g) + '</option>').join("") + '</select></label>' +
+    '<div class="picker-list" id="picker-list"></div><button type="button" class="outline-button" id="picker-custom">+ Create your own exercise</button>';
+  el("modal-form").onsubmit = (event) => event.preventDefault();
+  const muscles = new Set();
+  s[5].forEach((n) => { const it = findExercise(n); if (it) it[5].split("|").forEach((m) => muscles.add(m.trim())); });
+  const paint = () => {
+    const q = el("picker-search").value.trim().toLowerCase();
+    const group = el("picker-group").value;
+    const rows = libraryExercises().filter((it) => !s[5].includes(it[0]) && (!group || it[1] === group) && (it[0] + " " + it[5]).toLowerCase().includes(q))
+      .map((it) => ({ it, score: exerciseRelevance(it, s[3], muscles).score })).sort((a, b) => b.score - a.score).slice(0, 40);
+    el("picker-list").innerHTML = rows.length ? rows.map(({ it }) => '<div class="picker-row"><div><strong>' + safe(it[0]) + '</strong><small>' + safe(it[1]) + ' &middot; ' + safe(it[2]) + ' &middot; ' + safe(it[3]) + '</small></div><button type="button" class="outline-button" data-pick="' + safe(it[0]) + '">Add</button></div>').join("") : '<div class="empty-state">No matching exercises.</div>';
+    all("[data-pick]").forEach((b) => b.addEventListener("click", () => { if (addToSession(index, b.dataset.pick)) closeModal(); }));
+  };
+  el("picker-search").addEventListener("input", paint);
+  el("picker-group").addEventListener("change", paint);
+  el("picker-custom").addEventListener("click", () => openCustomExerciseModal(index));
+  paint();
+}
+function openCustomExerciseModal(index) {
+  const s = index == null ? null : weekPlan()[index];
+  const canAdd = s && !s[4];
+  el("modal-backdrop").hidden = false;
+  document.querySelector(".modal").classList.remove("wide");
+  el("modal-title").textContent = "Create your own exercise";
+  el("modal-form").innerHTML = '<label>Exercise name<input name="name" type="text" required maxlength="50" placeholder="e.g. Sandbag Carry" /></label>' +
+    '<label>Muscle group<select name="group">' + libraryGroups().map((g) => '<option>' + safe(g) + '</option>').join("") + '</select></label>' +
+    '<label>Level<select name="level"><option>beginner</option><option>intermediate</option><option>advanced</option></select></label>' +
+    '<div class="details-grid"><label>Sets x reps<input name="sets" type="text" maxlength="30" value="3 x 10" required /></label><label>Rest<input name="rest" type="text" maxlength="30" value="60s rest" required /></label></div>' +
+    '<label>Muscles worked (separate with |)<input name="muscles" type="text" maxlength="80" placeholder="core | grip | legs" /></label>' +
+    (canAdd ? '<label class="inline-check"><input name="addToDay" type="checkbox" checked /> Also add to ' + s[0] + "'s session</label>" : "") +
+    '<button class="primary-button" type="submit">Save exercise</button>';
+  el("modal-form").onsubmit = (event) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const name = String(data.get("name")).trim().replace(/\s+/g, " ");
+    if (!name) return;
+    if (libraryExercises().some((e) => e[0].toLowerCase() === name.toLowerCase())) { toast("An exercise called \"" + name + "\" already exists."); return; }
+    state.customExercises.push({ name, group: String(data.get("group")), level: String(data.get("level")), sets: String(data.get("sets")).trim() || "3 x 10", rest: String(data.get("rest")).trim() || "60s rest", muscles: String(data.get("muscles") || "").trim() || String(data.get("group")).toLowerCase() });
+    logChange("custom", "Created custom exercise " + name);
+    const addToDay = canAdd && data.get("addToDay");
+    saveState();
+    closeModal();
+    if (addToDay) addToSession(index, name); else refreshWorkoutViews();
+    renderExercises();
+    toast("Saved " + name + " to your library.");
+  };
+}
+
+// ── Full exercise library ──
 function renderExercises() {
-  const banner = el("day-view-banner");
-  const libraryTools = el("library-tools");
-  if (dayViewExercises) {
-    banner.hidden = false;
-    libraryTools.hidden = true;
-    el("day-view-label").textContent = dayViewLabel;
-    el("exercise-grid").innerHTML = dayViewExercises.map(renderExerciseCard).join("");
-    wireExerciseCardButtons();
-    return;
-  }
-  banner.hidden = true;
-  libraryTools.hidden = false;
-  // Always show base groups + any sport-specific groups the user cares about
-  const sports = state.profile.sports || [];
-  const baseGroups = ["Chest","Back","Shoulders","Biceps","Triceps","Quads","Hamstrings","Glutes","Core","Calves","Full Body"];
-  const sportGroups = [];
-  if (sports.some(s => ["Pilates"].includes(s))) sportGroups.push("Pilates");
-  if (sports.some(s => ["Yoga"].includes(s))) sportGroups.push("Yoga");
-  if (sports.some(s => ["Boxing","Kickboxing","Martial Arts","Brazilian Jiu-Jitsu","Wrestling"].includes(s))) sportGroups.push("Combat");
-  if (sports.some(s => ["Running","Trail Running","Sprinting","Triathlon"].includes(s))) sportGroups.push("Running");
-  if (sports.some(s => ["Calisthenics"].includes(s))) sportGroups.push("Calisthenics");
-  if (sports.some(s => ["Dance","Gymnastics"].includes(s))) sportGroups.push("Dance");
-  const groups = [...baseGroups, ...sportGroups];
-  el("exercise-filters").innerHTML = groups.map((group) => '<button type="button" class="' + (group === exerciseGroup ? "active" : "") + '" data-exercise-filter="' + group + '">' + group + '</button>').join("");
+  const groups = ["All"].concat(libraryGroups());
+  el("exercise-filters").innerHTML = groups.map((group) => '<button type="button" class="' + (group === exerciseGroup ? "active" : "") + '" data-exercise-filter="' + safe(group) + '">' + safe(group) + '</button>').join("");
   all("[data-exercise-filter]").forEach((button) => button.addEventListener("click", () => {
     exerciseGroup = button.dataset.exerciseFilter;
     renderExercises();
   }));
   const query = el("exercise-search").value.trim().toLowerCase();
-  const filtered = EXERCISES.filter((item) => (exerciseGroup === "Full Body" || item[1] === exerciseGroup) && item[0].toLowerCase().includes(query));
+  const filtered = libraryExercises().filter((item) => (exerciseGroup === "All" || item[1] === exerciseGroup) && (item[0] + " " + item[5]).toLowerCase().includes(query));
   el("exercise-grid").innerHTML = filtered.length ? filtered.map(renderExerciseCard).join("") : '<div class="empty-state">No matching exercises found.</div>';
   wireExerciseCardButtons();
 }
 
 function renderExerciseCard(item) {
-  return '<article class="exercise-card"><h3>' + item[0] + '</h3><div class="tag-row"><span class="tag accent">' + item[2] + '</span><span class="tag">' + item[3] + '</span><span class="tag">' + item[4] + '</span></div><p>' + item[5] + '</p><div class="exercise-actions"><button type="button" data-exercise-info="' + safe(item[0]) + '">How to do it</button><button type="button" data-exercise-demo="' + safe(item[0]) + '">Watch demo</button></div></article>';
+  const name = item[0];
+  const target = sessionDayIndex == null ? todayIndex() : sessionDayIndex;
+  const inSession = weekPlan()[target][5].includes(name);
+  return '<article class="exercise-card"><h3>' + safe(name) + '</h3><div class="tag-row"><span class="tag accent">' + safe(item[2]) + '</span><span class="tag">' + safe(item[3]) + '</span><span class="tag">' + safe(item[4]) + '</span></div><p>' + safe(item[5]) + '</p>' +
+    '<div class="exercise-actions"><button type="button" data-exercise-info="' + safe(name) + '">How to do it</button><a href="' + demoUrl(name) + '" target="_blank" rel="noopener">Watch demo</a>' +
+    '<button type="button" data-lib-add="' + safe(name) + '" ' + (inSession ? "disabled" : "") + '>' + (inSession ? "In session" : "+ Session") + '</button>' +
+    (isCustomExercise(name) ? '<button type="button" class="remove-ex" data-lib-delete="' + safe(name) + '">Delete</button>' : "") + '</div></article>';
 }
 
 function wireExerciseCardButtons() {
-  all("[data-exercise-info]").forEach((button) => button.addEventListener("click", () => openExerciseInfo(button.dataset.exerciseInfo)));
-  all("[data-exercise-demo]").forEach((button) => button.addEventListener("click", () => {
-    const query = encodeURIComponent(button.dataset.exerciseDemo + " exercise form");
-    window.open("https://www.youtube.com/results?search_query=" + query, "_blank", "noopener");
+  all("#exercise-grid [data-exercise-info]").forEach((button) => button.addEventListener("click", () => openExerciseInfo(button.dataset.exerciseInfo)));
+  all("[data-lib-add]").forEach((button) => button.addEventListener("click", () => {
+    const target = sessionDayIndex == null ? todayIndex() : sessionDayIndex;
+    if (addToSession(target, button.dataset.libAdd)) renderExercises();
   }));
-  const exitButton = el("day-view-exit");
-  if (exitButton) exitButton.onclick = () => {
-    dayViewExercises = null;
+  all("[data-lib-delete]").forEach((button) => button.addEventListener("click", () => {
+    const name = button.dataset.libDelete;
+    state.customExercises = state.customExercises.filter((e) => e.name !== name);
+    Object.keys(state.dayExercises).forEach((day) => { state.dayExercises[day] = state.dayExercises[day].filter((n) => n !== name); });
+    logChange("custom", "Deleted custom exercise " + name);
+    saveState();
+    refreshWorkoutViews();
     renderExercises();
-    changeTab("workout", "split"); // "Back" returns to the weekly split, not the library
-  };
+    toast("Deleted " + name + ".");
+  }));
 }
 
 function renderMealPlan() {
@@ -1279,6 +1659,7 @@ function calculateTargets(profile) {
 
 function closeModal() {
   el("modal-backdrop").hidden = true;
+  document.querySelector(".modal").classList.remove("wide");
   el("modal-form").onsubmit = null;
 }
 
@@ -1317,11 +1698,14 @@ function openWeightModal() {
 }
 
 function openExerciseInfo(name) {
-  const item = EXERCISES.find((exercise) => exercise[0] === name);
+  const item = findExercise(name);
   if (!item) return;
+  const cue = (window.FLEXFIT_DATA && window.FLEXFIT_DATA.cues[name]) || "Keep your setup stable, use a controlled range of motion, and stop when form breaks down.";
   el("modal-backdrop").hidden = false;
+  document.querySelector(".modal").classList.remove("wide");
   el("modal-title").textContent = item[0];
-  el("modal-form").innerHTML = '<p class="modal-copy">' + item[3] + ' with ' + item[4] + '. Keep your setup stable, use a controlled range of motion, and stop when form breaks down.</p><button class="primary-button" type="button" id="exercise-close">Got it</button>';
+  el("modal-form").onsubmit = (event) => event.preventDefault();
+  el("modal-form").innerHTML = '<p class="modal-copy"><strong>' + safe(item[3]) + '</strong> with ' + safe(item[4]) + '. Works: ' + safe(item[5]) + '.</p><p class="modal-copy">' + safe(cue) + '</p><a class="outline-button" href="' + demoUrl(item[0]) + '" target="_blank" rel="noopener">Watch demo video</a><button class="primary-button" type="button" id="exercise-close">Got it</button>';
   el("exercise-close").addEventListener("click", closeModal);
 }
 
@@ -1670,12 +2054,7 @@ function events() {
     changePage(link.dataset.nav);
   }));
   all("[data-tab-group]").forEach((button) => button.addEventListener("click", () => {
-    // Clicking the Exercise Library tab directly (not via a day's "View Exercises" button)
-    // always starts from normal browsing, not a leftover day-specific view.
-    if (button.dataset.tabGroup === "workout" && button.dataset.tab === "library" && dayViewExercises) {
-      dayViewExercises = null;
-      renderExercises();
-    }
+    if (button.dataset.tabGroup === "workout" && button.dataset.tab === "library") renderExercises();
     changeTab(button.dataset.tabGroup, button.dataset.tab);
   }));
   all("[data-next-profile]").forEach((button) => button.addEventListener("click", () => {
@@ -1820,12 +2199,7 @@ function events() {
     renderAll();
     toast("Exploring as Guest - nothing here will be saved after this tab closes.");
   });
-  el("regenerate-workout").addEventListener("click", () => {
-    state.workoutVersion += 1;
-    saveState();
-    renderWorkout();
-    toast("Weekly split regenerated.");
-  });
+  el("regenerate-workout").addEventListener("click", () => openSplitChooser(0));
   el("exercise-search").addEventListener("input", renderExercises);
   el("generate-diet").addEventListener("click", () => {
     state.dietGenerated = true;
@@ -1993,7 +2367,7 @@ function applyAuthGate() {
     shell.hidden = true;
     document.body.classList.remove("onboarding-mode");
     resetScanner();
-    dayViewExercises = null; dayViewLabel = "";
+    sessionDayIndex = null;
     el("auth-form").reset();
     return;
   }
