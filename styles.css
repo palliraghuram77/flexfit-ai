@@ -2836,3 +2836,17 @@ body.onboarding-mode .main-content {
 .activity-cat small { color: var(--muted); font-weight: 500; margin-left: 6px; }
 .activity-cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
 #cardio-history { max-height: 460px; overflow-y: auto; }
+
+/* ── Batch 4: diet plan, finished button, disabled start ── */
+.meal-plan .plan-head { grid-column: 1 / -1; }
+.plan-head { font-size: 1rem; margin: 10px 0 0; }
+.plan-head small { color: var(--muted); font-weight: 500; margin-left: 6px; }
+.plan-toolbar { display: grid; gap: 10px; }
+.plan-total { color: var(--muted); }
+.plan-total b { color: var(--accent); }
+.meal-card.selected { border-color: var(--accent); background: var(--accent-soft, rgba(237, 125, 91, 0.12)); }
+.meal-macros { font-size: 0.82rem; color: var(--muted); }
+.finish-ex { background: none; border: 1px solid var(--line); color: var(--text); border-radius: 999px; padding: 6px 12px; font-weight: 700; cursor: pointer; }
+.finish-ex.done, .finish-ex:hover { border-color: var(--accent); color: var(--accent); }
+.session-exercise.done .finish-ex { background: var(--accent); color: #1c1311; }
+#cardio-start-btn:disabled { opacity: 0.5; cursor: not-allowed; }

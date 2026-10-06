@@ -176,7 +176,7 @@ let cardioGpsWatch = null;
 let cardioRoute = []; // [{lat, lng, alt, t}]
 let cardioElevGain = 0;
 let cardioPaused = false;
-let cardioSelectedActivity = { name: "Running", met: 9.8, icon: "🏃", cat: "Walk & Run", timed: false };
+let cardioSelectedActivity = null; // nothing is pre-selected: the user must choose
 const CARDIO_CATEGORIES = [
   ["Walk & Run", false, [["Walking",3.5,"🚶"],["Brisk Walking",4.3,"🚶"],["Nordic Walking",4.8,"🚶"],["Hiking",6.0,"🥾"],["Jogging",7.0,"🏃"],["Running",9.8,"🏃"],["Trail Running",9.0,"🏔️"],["Sprinting",12.0,"💨"],["Stair Climbing",8.8,"🪜"],["Mountain Climbing",8.0,"⛰️"]]],
   ["Cycling", false, [["Cycling",7.5,"🚴"],["Mountain Biking",8.5,"🚵"],["E-bike",4.0,"🚲"]]],
@@ -213,6 +213,7 @@ function defaultState() {
     jiyaChats: [],
     activeChatId: null,
     dietGenerated: false,
+    dietPrefs: { diet: "nonveg", cuisine: "any", picks: {} },
     workoutVersion: 0,
     workoutPlan: null,
     dayExercises: {},
@@ -933,6 +934,7 @@ function sessionRowHtml(index, name, checked) {
     '<div class="se-main"><h3>' + safe(name) + '</h3><div class="tag-row"><span class="tag accent">' + safe(item[2]) + '</span><span class="tag">' + safe(item[3]) + '</span><span class="tag">' + safe(item[4]) + '</span></div><p>' + safe(item[5]) + '</p>' +
     '<div class="exercise-actions"><button type="button" data-exercise-info="' + safe(name) + '">How to do it</button>' +
     '<a href="' + demoUrl(name) + '" target="_blank" rel="noopener">Watch demo</a>' +
+    '<button type="button" class="finish-ex' + (checked ? ' done' : '') + '" data-finish-ex="' + safe(name) + '" aria-pressed="' + (checked ? 'true' : 'false') + '">' + (checked ? '✓ Finished' : 'Mark finished') + '</button>' +
     '<button type="button" class="remove-ex" data-remove-ex="' + safe(name) + '">Remove</button></div></div></article>';
 }
 
@@ -995,6 +997,7 @@ function renderSession() {
 function wireSession(root, index) {
   root.querySelectorAll("[data-session-day]").forEach((b) => b.addEventListener("click", () => { sessionDayIndex = num(b.dataset.sessionDay); renderSession(); }));
   root.querySelectorAll("[data-done]").forEach((b) => b.addEventListener("change", () => toggleExerciseDone(index, b.dataset.done)));
+  root.querySelectorAll("[data-finish-ex]").forEach((b) => b.addEventListener("click", () => toggleExerciseDone(index, b.dataset.finishEx)));
   root.querySelectorAll("[data-remove-ex]").forEach((b) => b.addEventListener("click", () => removeFromSession(index, b.dataset.removeEx)));
   root.querySelectorAll("[data-add-name]").forEach((b) => b.addEventListener("click", () => addToSession(index, b.dataset.addName)));
   root.querySelectorAll("[data-exercise-info]").forEach((b) => b.addEventListener("click", () => openExerciseInfo(b.dataset.exerciseInfo)));
@@ -1196,27 +1199,56 @@ function wireExerciseCardButtons() {
   }));
 }
 
+// name | ingredients | kcal | protein g | cuisine (i = Indian, w = Western)
+const DIET_SLOTS = [["Breakfast", 0.25], ["Lunch", 0.35], ["Snack", 0.12], ["Dinner", 0.28]];
+const DIET_MEALS = {
+  veg: {
+    Breakfast: ["Paneer bhurji with 2 rotis|Paneer, onion, tomato, roti|420|24|i", "Moong dal chilla with curd|Moong dal, spinach, curd|350|22|i", "Protein oats with berries|Oats, milk, yogurt, berries|380|25|w", "Greek yogurt parfait|Greek yogurt, granola, banana|400|26|w", "Peanut butter banana toast|Whole-grain bread, peanut butter, banana, milk|420|16|w"],
+    Lunch: ["Rajma chawal with salad|Kidney beans, rice, cucumber salad|600|22|i", "Paneer tikka bowl|Paneer, brown rice, peppers, curd|620|36|i", "Dal, roti and sabzi|Toor dal, 3 rotis, mixed veg|580|24|i", "Quinoa chickpea bowl|Quinoa, chickpeas, feta, veg|600|26|w", "Pasta primavera with cheese|Whole-wheat pasta, veg, parmesan|620|24|w"],
+    Snack: ["Roasted chana and buttermilk|Chana, chaas|220|13|i", "Sprouts chaat|Moong sprouts, onion, tomato, lemon|200|14|i", "Greek yogurt with almonds|Yogurt, almonds, honey|230|18|w", "Cottage cheese and fruit|Cottage cheese, apple|240|20|w", "Banana peanut butter shake|Milk, banana, peanut butter|300|15|w"],
+    Dinner: ["Palak paneer with roti|Paneer, spinach, 2 rotis|560|30|i", "Soya chunk curry with rice|Soya chunks, tomato gravy, rice|540|38|i", "Moong dal khichdi with curd|Rice, moong dal, ghee, curd|500|22|i", "Mushroom spinach pasta|Whole-wheat pasta, mushrooms, spinach, cheese|560|24|w", "Lentil soup with grilled cheese|Lentils, bread, cheese|520|26|w"],
+  },
+  vegan: {
+    Breakfast: ["Poha with peanuts|Flattened rice, peanuts, veg|380|10|i", "Besan chilla with chutney|Gram flour, onion, mint chutney|340|16|i", "Tofu scramble on toast|Tofu, spinach, whole-grain toast|380|26|w", "Overnight oats with soy milk|Oats, soy milk, chia, berries|390|18|w", "Peanut butter smoothie bowl|Soy milk, banana, peanut butter, oats|430|17|w"],
+    Lunch: ["Chole with rice|Chickpeas, rice, onion salad|620|24|i", "Dal tadka, rice and sabzi|Dal, rice, mixed veg|580|22|i", "Soya keema with 3 rotis|Soya granules, peas, rotis|600|40|i", "Quinoa black bean bowl|Quinoa, black beans, avocado, corn|620|24|w", "Tofu stir-fry with noodles|Tofu, rice noodles, veg|600|30|w"],
+    Snack: ["Roasted chana and orange|Chana, orange|200|11|i", "Sprouts salad|Sprouts, cucumber, lemon|180|12|i", "Hummus with veg sticks|Hummus, carrot, cucumber|210|8|w", "Soy protein shake with banana|Soy milk, plant protein, banana|280|28|w", "Almonds and dates|Almonds, dates|240|7|w"],
+    Dinner: ["Soya chunk curry with rice|Soya chunks, tomato gravy, rice|540|38|i", "Rajma masala with roti|Rajma, onion gravy, 2 rotis|540|22|i", "Moong dal khichdi|Rice, moong dal, veg|480|20|i", "Lentil bolognese pasta|Whole-wheat pasta, lentil sauce|560|28|w", "Chickpea curry with brown rice|Chickpeas, coconut gravy, brown rice|550|22|w"],
+  },
+  nonveg: {
+    Breakfast: ["Masala omelette with 2 rotis|3 eggs, onion, roti|450|27|i", "Egg bhurji with toast|Eggs, onion, toast|420|26|i", "Eggs, toast and fruit|3 eggs, whole-grain toast, orange|440|28|w", "Protein oats with whey|Oats, whey, banana|420|34|w", "Chicken sausage egg wrap|Wrap, eggs, chicken sausage|460|30|w"],
+    Lunch: ["Chicken curry with rice|Chicken, rice, salad|640|42|i", "Chicken tikka bowl|Chicken tikka, brown rice, veg|620|48|i", "Egg curry with 2 rotis|3 eggs, gravy, rotis|580|30|i", "Grilled chicken rice bowl|Chicken, rice, greens, avocado|650|46|w", "Tuna pasta salad|Tuna, whole-wheat pasta, veg|600|42|w"],
+    Snack: ["Egg chaat|Boiled eggs, onion, chaat masala|190|14|i", "Chicken tikka skewers|Chicken breast, mint chutney|220|32|i", "Tuna on crackers|Tuna, crackers|220|24|w", "Whey shake with banana|Whey, milk, banana|300|32|w", "Greek yogurt with almonds|Yogurt, almonds, honey|230|18|w"],
+    Dinner: ["Fish curry with rice and veg|Fish, rice, sabzi|560|40|i", "Light butter chicken with roti|Chicken, tomato gravy, 2 rotis|600|44|i", "Chicken keema with roti|Chicken mince, peas, 2 rotis|580|42|i", "Salmon with potatoes|Salmon, roasted potatoes, veg|620|40|w", "Chicken stir-fry with noodles|Chicken, noodles, veg|580|42|w"],
+  },
+};
+const DIET_LABELS = [["veg", "🥛 Vegetarian"], ["nonveg", "🍗 Non-veg"], ["vegan", "🌱 Vegan"]];
+const CUISINE_LABELS = [["any", "Any cuisine"], ["indian", "Indian first"], ["western", "Western first"]];
+
 function renderMealPlan() {
-  const meals = [
-    ["Breakfast", "Protein oats with berries", "Oats, Greek yogurt, berries and seeds."],
-    ["Lunch", "Chicken rice bowl", "Grilled chicken, rice, greens and avocado."],
-    ["Snack", "Yogurt fruit bowl", "High-protein yogurt, banana and almonds."],
-    ["Dinner", "Salmon with potatoes", "Salmon, roasted potatoes and vegetables."],
-  ];
-  el("meal-plan").innerHTML = state.dietGenerated ? meals.map((meal, index) => '<article class="meal-card"><span>' + meal[0] + '</span><h3 id="meal-title-' + index + '">' + meal[1] + '</h3><p id="meal-detail-' + index + '">' + meal[2] + '</p><button type="button" data-swap="' + index + '">Swap alternative</button></article>').join("") : "";
-  all("[data-swap]").forEach((button) => button.addEventListener("click", () => {
-    const options = [
-      ["Egg and veggie wrap", "Eggs, whole-grain wrap, spinach and fruit."],
-      ["Turkey quinoa bowl", "Turkey, quinoa, salad and olive oil."],
-      ["Cottage cheese toast", "Cottage cheese, toast, banana and cinnamon."],
-      ["Tofu noodle stir fry", "Tofu, rice noodles and colorful vegetables."],
-    ];
-    const index = num(button.dataset.swap);
-    el("meal-title-" + index).textContent = options[index][0];
-    el("meal-detail-" + index).textContent = options[index][1];
-    button.disabled = true;
-    button.textContent = "Alternative selected";
-  }));
+  const host = el("meal-plan");
+  if (!state.dietGenerated) { host.innerHTML = ""; return; }
+  const prefs = state.dietPrefs;
+  const target = num(state.targets.calories, 2000);
+  let totalK = 0, totalP = 0;
+  const cards = DIET_SLOTS.map(([slot, share]) => {
+    let list = (DIET_MEALS[prefs.diet] || DIET_MEALS.nonveg)[slot].map((row) => { const [name, items, kcal, protein, cuisine] = row.split("|"); return { name, items, kcal: num(kcal), protein: num(protein), cuisine }; });
+    const first = prefs.cuisine === "indian" ? "i" : prefs.cuisine === "western" ? "w" : "";
+    if (first) list = list.filter((m) => m.cuisine === first).concat(list.filter((m) => m.cuisine !== first));
+    const slotTarget = target * share;
+    const pick = Math.min(num(prefs.picks[slot], 0), list.length - 1);
+    let html = '<h3 class="plan-head">' + slot + ' <small>about ' + Math.round(slotTarget) + ' kcal - choose 1 of ' + list.length + '</small></h3>';
+    list.forEach((m, i) => {
+      const scale = Math.round(Math.min(1.8, Math.max(0.6, slotTarget / m.kcal)) * 10) / 10;
+      if (i === pick) { totalK += m.kcal * scale; totalP += m.protein * scale; }
+      html += '<article class="meal-card' + (i === pick ? " selected" : "") + '"><span>' + (m.cuisine === "i" ? "🇮🇳 Indian" : "🌍 Western") + '</span><h3>' + safe(m.name) + '</h3><p>' + safe(m.items) + '</p><p class="meal-macros"><b>' + Math.round(m.kcal * scale) + ' kcal</b> - ' + Math.round(m.protein * scale) + 'g protein - serving x' + scale + '</p><button type="button" data-pick="' + slot + '|' + i + '">' + (i === pick ? "✓ Selected" : "Choose this") + '</button></article>';
+    });
+    return html;
+  }).join("");
+  host.innerHTML = '<div class="plan-head plan-toolbar"><div class="filter-row">' + DIET_LABELS.map(([k, l]) => '<button type="button" class="' + (prefs.diet === k ? "active" : "") + '" data-diet="' + k + '">' + l + '</button>').join("") + '</div><div class="filter-row">' + CUISINE_LABELS.map(([k, l]) => '<button type="button" class="' + (prefs.cuisine === k ? "active" : "") + '" data-cuisine="' + k + '">' + l + '</button>').join("") + '</div><p class="plan-total">Your day: <b>' + Math.round(totalK) + ' kcal</b> - ' + Math.round(totalP) + 'g protein (target ' + Math.round(target) + ' kcal)</p></div>' + cards;
+  const change = (patch) => { Object.assign(state.dietPrefs, patch, { picks: {} }); saveState(); renderMealPlan(); };
+  host.querySelectorAll("[data-diet]").forEach((b) => b.addEventListener("click", () => change({ diet: b.dataset.diet })));
+  host.querySelectorAll("[data-cuisine]").forEach((b) => b.addEventListener("click", () => change({ cuisine: b.dataset.cuisine })));
+  host.querySelectorAll("[data-pick]").forEach((b) => b.addEventListener("click", () => { const [slot, i] = b.dataset.pick.split("|"); state.dietPrefs.picks[slot] = num(i); saveState(); renderMealPlan(); }));
 }
 
 function renderIngredients() {
@@ -1269,7 +1301,7 @@ function totalRouteKm(route) {
 }
 
 function cardioCalories(seconds) {
-  return cardioSelectedActivity.met * num(state.profile.weight || 70) * 3.5 * seconds / (200 * 60);
+  return (cardioSelectedActivity ? cardioSelectedActivity.met : 0) * num(state.profile.weight || 70) * 3.5 * seconds / (200 * 60);
 }
 
 function fmtTime(s) {
@@ -1365,7 +1397,7 @@ function renderCardio() {
   el("activity-type-grid").innerHTML = CARDIO_CATEGORIES.map(([cat, timed, list]) => {
     const shown = list.filter((item) => !query || item[0].toLowerCase().includes(query) || cat.toLowerCase().includes(query));
     return shown.length ? '<h3 class="activity-cat">' + safe(cat) + (timed ? ' <small>timer-based</small>' : ' <small>GPS</small>') + '</h3><div class="activity-cat-grid">' + shown.map(([name, met, icon]) =>
-      '<button type="button" class="activity-type-btn' + (cardioSelectedActivity.name === name ? " active" : "") + '" data-act="' + safe(name) + '"><span class="act-icon">' + icon + '</span>' + safe(name) + '</button>').join("") + '</div>' : "";
+      '<button type="button" class="activity-type-btn' + (cardioSelectedActivity && cardioSelectedActivity.name === name ? " active" : "") + '" data-act="' + safe(name) + '"><span class="act-icon">' + icon + '</span>' + safe(name) + '</button>').join("") + '</div>' : "";
   }).join("") || '<p class="empty-state">No activity matches your search.</p>';
   all("[data-act]").forEach((btn) => btn.addEventListener("click", () => {
     cardioSelectedActivity = CARDIO_ACTIVITIES.find((a) => a.name === btn.dataset.act) || cardioSelectedActivity;
@@ -1373,7 +1405,8 @@ function renderCardio() {
     el("gps-note").textContent = cardioSelectedActivity.timed ? "This activity is timer-based: calories come from your time and body weight, no GPS needed." : "GPS required - allow location access when prompted.";
     renderCardio();
   }));
-  el("selected-activity-name").textContent = cardioSelectedActivity.name;
+  el("selected-activity-name").textContent = cardioSelectedActivity ? cardioSelectedActivity.name : "Choose an activity";
+  el("cardio-start-btn").disabled = !cardioSelectedActivity;
 
   // totals & history
   const calories = state.cardioSessions.reduce((sum, s) => sum + num(s.calories), 0);
@@ -1400,6 +1433,7 @@ let cardioMovingSeconds = 0;
 let cardioLastMoveAt = 0;
 
 function startGpsSession() {
+  if (!cardioSelectedActivity) { toast("Pick an activity first."); return; }
   const timedActivity = !!cardioSelectedActivity.timed;
   if (!timedActivity && !navigator.geolocation) {
     toast("GPS not available on this device.");
@@ -1495,6 +1529,18 @@ function finishGpsSession() {
 
 function coachReply(prompt) {
   const text = prompt.toLowerCase().trim();
+  const who = state.session.name ? " " + state.session.name : "";
+  const todayLine = () => {
+    let s = null;
+    try { s = weekPlan()[todayIndex()]; } catch (e) { /* plan not ready */ }
+    if (!s) return "Open the Workout tab to see today's session.";
+    if (s[4]) return "Today (" + s[0] + ") is a rest day - walk, stretch, hydrate and sleep well so you come back stronger.";
+    const names = (s[5] || []).slice(0, 3).join(", ");
+    return "Today (" + s[0] + ") is " + s[1] + (names ? ": start with " + names : "") + ". Open Workout and tick each exercise off as you finish it.";
+  };
+  if (/^(wass?up|sup|wyd|what'?s up|whats up|how are you|how r u)\b/.test(text)) return "Doing great" + who + "! " + todayLine();
+  if (/((do|train|workout|plan).*(to\w*day|now)|to\w*day.*(workout|plan|train)|should i do)/.test(text)) return todayLine();
+  if (/(how much|what).*prot\w*/.test(text)) return "Your daily protein target is " + state.targets.protein + "g - about " + Math.round(num(state.targets.protein) / 4) + "g across 4 meals, from eggs, chicken, paneer, soya, dal or whey.";
   if (/^(hi|hii+|hey+|hello+|yo|sup|howdy)\b/.test(text) || text === "hi" || text === "hey") {
     return "Hey" + (state.session.name ? " " + state.session.name : "") + "! I'm Jiya. Ask me for a workout, a meal plan, your protein target, or a HIIT session and I'll tailor it to your profile.";
   }
@@ -1510,7 +1556,7 @@ function coachReply(prompt) {
   if (text.includes("cardio") || text.includes("run")) return "For steady-state cardio, aim for 25-40 minutes at a pace where you can still hold a conversation. Log it in Cardio so it counts toward your weekly total.";
   if (text.includes("weight") || text.includes("progress")) return "You're currently at " + state.profile.weight + "kg with a target of " + state.profile.targetWeight + "kg. Log your weight regularly in Progress so the trend stays accurate.";
   if (text.includes("push") || text.includes("chest") || text.includes("workout") || text.includes("split") || text.includes("exercise")) return "For your next push session: press, incline press, shoulder press, lateral raises and triceps work. Keep one or two reps in reserve.";
-  return "I didn't quite catch that. Try asking about a workout, a meal plan, your protein/calorie targets, cardio, or your progress.";
+  return "Your targets are " + state.targets.calories + " kcal and " + state.targets.protein + "g protein. " + todayLine() + " You can also ask me about meals, cardio or progress.";
 }
 
 function activeChat() {
@@ -1550,17 +1596,20 @@ async function fetchJiyaReply(message, chat) {
   });
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const response = await fetch("/api/jiya", { method: "POST", headers: { "Content-Type": "application/json" }, body: payload });
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 9000); // never leave the user waiting more than ~9 s
+      const response = await fetch("/api/jiya", { method: "POST", headers: { "Content-Type": "application/json" }, body: payload, signal: ctl.signal });
+      clearTimeout(timer);
       if (!response.ok) throw new Error("bad status " + response.status);
       const data = await response.json();
       if (!data || !data.reply) throw new Error("no reply in response");
       return data.reply;
     } catch (err) {
-      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 1500)); // brief pause, then retry once
+      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 500)); // brief pause, then retry once
     }
   }
   // Both tries failed (AI busy or offline): answer from the built-in coach, and say so.
-  return "(Jiya's AI is busy, so this is a quick offline answer) " + coachReply(message);
+  return "(quick offline answer) " + coachReply(message);
 }
 
 async function addChat(prompt) {
@@ -1780,6 +1829,7 @@ async function imageToScanBase64(file, maxSize = 1024, quality = 0.82) {
 function scanFailureReason(status, bodyText) {
   let detail = "";
   try { const parsed = JSON.parse(bodyText); detail = String(parsed.detail || parsed.error || "").slice(0, 220); } catch (e) { /* not JSON */ }
+  if ([429, 503, 504].includes(status) || /busy|high demand|UNAVAILABLE|timeout/i.test(detail)) return "The food scanner is busy right now. Please try again in a minute.";
   if (status === 404) return "The /api/scan-food function wasn't found (404). It isn't deployed here - on Netlify check that netlify/functions/scan-food.js is in the repo, or run the site with `netlify dev` locally.";
   if (/high demand|UNAVAILABLE|503/i.test(detail)) return "Google's AI is busy right now (high demand). The app already retried - wait a few seconds and press Scan Food with AI again.";
   if (status === 502) return "Gemini rejected or failed the request" + (detail ? " (" + detail + ")" : "") + ". Open Netlify -> Logs -> Functions -> scan-food for Google's exact message - usually an invalid model name or API key.";
@@ -1796,11 +1846,13 @@ async function analyzeFoodPhoto(file) {
   }
   try {
     const { base64, mimeType } = await imageToScanBase64(file);
-    const response = await fetch("/api/scan-food", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image: base64, mimeType }),
-    });
+    let response;
+    for (let attempt = 1; attempt <= 3; attempt += 1) { // the scanner retries by itself so you don't have to
+      response = await fetch("/api/scan-food", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: base64, mimeType }) });
+      if (response.ok || ![429, 502, 503, 504].includes(response.status) || attempt === 3) break;
+      el("scan-result").innerHTML = "<strong>The scanner is busy - retrying (" + attempt + "/3)...</strong>";
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
     if (!response.ok) {
       lastScanResult = null;
       return demoScanResult(scanFailureReason(response.status, await response.text().catch(() => "")));

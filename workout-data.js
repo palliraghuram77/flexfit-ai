@@ -74,6 +74,80 @@
     ["Ankle Mobility Drill", "Mobility", "beginner", "2 x 10 each", "15s rest", "ankles | calves"],
     // Calisthenics
     ["Handstand Hold", "Calisthenics", "intermediate", "4 x 20-30s", "75s rest", "shoulders | core | balance"],
+    // More Chest
+    ["Cable Crossover", "Chest", "intermediate", "3 x 10-12", "75s rest", "chest"],
+    ["Pec Deck Fly", "Chest", "intermediate", "3 x 10-12", "75s rest", "chest"],
+    ["Svend Press", "Chest", "intermediate", "3 x 10-12", "75s rest", "chest"],
+    ["Dumbbell Pullover", "Chest", "intermediate", "3 x 10-12", "75s rest", "chest | lats"],
+    ["Wide Push-Up", "Chest", "intermediate", "3 x 10-12", "75s rest", "chest | triceps"],
+    ["Archer Push-Up", "Chest", "intermediate", "3 x 10-12", "75s rest", "chest | triceps"],
+    ["Deficit Push-Up", "Chest", "intermediate", "3 x 10-12", "75s rest", "chest | shoulders"],
+    ["Smith Machine Incline Press", "Chest", "intermediate", "3 x 10-12", "75s rest", "chest | shoulders"],
+    // More Back
+    ["Meadows Row", "Back", "intermediate", "4 x 8-10", "90s rest", "lats | biceps"],
+    ["Wide-Grip Lat Pulldown", "Back", "intermediate", "4 x 8-10", "90s rest", "lats | biceps"],
+    ["Close-Grip Pulldown", "Back", "intermediate", "4 x 8-10", "90s rest", "lats | biceps"],
+    ["Back Extension", "Back", "intermediate", "4 x 8-10", "90s rest", "lower back | glutes"],
+    ["Superman Hold", "Back", "intermediate", "4 x 8-10", "90s rest", "lower back | glutes"],
+    // More Shoulders
+    ["Upright Row", "Shoulders", "intermediate", "3 x 10-12", "60s rest", "shoulders | traps"],
+    ["Seated Dumbbell Press", "Shoulders", "intermediate", "3 x 10-12", "60s rest", "shoulders | triceps"],
+    ["Push Press", "Shoulders", "intermediate", "3 x 10-12", "60s rest", "shoulders | legs"],
+    ["Bus Driver", "Shoulders", "intermediate", "3 x 10-12", "60s rest", "shoulders | forearms"],
+    ["Reverse Pec Deck", "Shoulders", "intermediate", "3 x 10-12", "60s rest", "rear delts"],
+    // More Traps
+    ["Barbell Shrug", "Traps", "intermediate", "4 x 10-12", "60s rest", "traps"],
+    ["Dumbbell Shrug", "Traps", "intermediate", "4 x 10-12", "60s rest", "traps"],
+    ["Farmer's Carry", "Traps", "intermediate", "4 x 10-12", "60s rest", "traps | forearms | core"],
+    ["Cable Shrug", "Traps", "intermediate", "4 x 10-12", "60s rest", "traps"],
+    // More Biceps
+    ["Hammer Curl", "Biceps", "beginner", "3 x 10-12", "60s rest", "biceps | forearms"],
+    ["Spider Curl", "Biceps", "beginner", "3 x 10-12", "60s rest", "biceps"],
+    ["Zottman Curl", "Biceps", "beginner", "3 x 10-12", "60s rest", "biceps | forearms"],
+    ["EZ-Bar Curl", "Biceps", "beginner", "3 x 10-12", "60s rest", "biceps"],
+    // More Triceps
+    ["Overhead Triceps Extension", "Triceps", "beginner", "3 x 10-12", "60s rest", "triceps"],
+    ["Triceps Pushdown", "Triceps", "beginner", "3 x 10-12", "60s rest", "triceps"],
+    ["Triceps Kickback", "Triceps", "beginner", "3 x 10-12", "60s rest", "triceps"],
+    ["Rope Pushdown", "Triceps", "beginner", "3 x 10-12", "60s rest", "triceps"],
+    ["JM Press", "Triceps", "beginner", "3 x 10-12", "60s rest", "triceps"],
+    // More Quads
+    ["Sissy Squat", "Quads", "intermediate", "4 x 8-10", "90s rest", "quads"],
+    ["Box Squat", "Quads", "intermediate", "4 x 8-10", "90s rest", "quads | glutes"],
+    ["Smith Machine Squat", "Quads", "intermediate", "4 x 8-10", "90s rest", "quads | glutes"],
+    // More Hamstrings
+    ["Lying Leg Curl", "Hamstrings", "intermediate", "3 x 10-12", "75s rest", "hamstrings"],
+    ["Seated Leg Curl", "Hamstrings", "intermediate", "3 x 10-12", "75s rest", "hamstrings"],
+    ["Glute-Ham Raise", "Hamstrings", "intermediate", "3 x 10-12", "75s rest", "hamstrings | glutes"],
+    ["Cable Pull-Through", "Hamstrings", "intermediate", "3 x 10-12", "75s rest", "hamstrings | glutes"],
+    ["Stability Ball Leg Curl", "Hamstrings", "intermediate", "3 x 10-12", "75s rest", "hamstrings | core"],
+    // More Glutes
+    ["Frog Pump", "Glutes", "beginner", "3 x 12-15", "60s rest", "glutes"],
+    ["Donkey Kick", "Glutes", "beginner", "3 x 12-15", "60s rest", "glutes"],
+    ["Fire Hydrant", "Glutes", "beginner", "3 x 12-15", "60s rest", "glute medius"],
+    ["Hip Abduction Machine", "Glutes", "beginner", "3 x 12-15", "60s rest", "glute medius"],
+    // More Core
+    ["V-Up", "Core", "beginner", "3 x 12-15", "45s rest", "abs"],
+    ["Woodchopper", "Core", "beginner", "3 x 12-15", "45s rest", "obliques"],
+    ["Reverse Crunch", "Core", "beginner", "3 x 12-15", "45s rest", "lower abs"],
+    ["Toe Touch Crunch", "Core", "beginner", "3 x 12-15", "45s rest", "abs"],
+    // More Calves
+    ["Donkey Calf Raise", "Calves", "beginner", "4 x 12-20", "45s rest", "calves"],
+    ["Leg Press Calf Raise", "Calves", "beginner", "4 x 12-20", "45s rest", "calves"],
+    ["Jump Rope Calf Bounce", "Calves", "beginner", "4 x 12-20", "45s rest", "calves | cardio"],
+    ["Tibialis Raise", "Calves", "beginner", "4 x 12-20", "45s rest", "tibialis | shins"],
+    // More Forearms
+    ["Wrist Curl", "Forearms", "beginner", "3 x 15-20", "45s rest", "forearms"],
+    ["Reverse Wrist Curl", "Forearms", "beginner", "3 x 15-20", "45s rest", "forearms"],
+    ["Plate Pinch", "Forearms", "beginner", "3 x 15-20", "45s rest", "forearms | grip"],
+    ["Reverse Curl", "Forearms", "beginner", "3 x 15-20", "45s rest", "forearms | biceps"],
+    // More Full Body
+    ["Clean and Press", "Full Body", "intermediate", "4 x 8", "60s rest", "full body"],
+    ["Kettlebell Snatch", "Full Body", "intermediate", "4 x 8", "60s rest", "full body | glutes"],
+    ["Turkish Get-Up", "Full Body", "intermediate", "4 x 8", "60s rest", "full body | core"],
+    ["Battle Rope Waves", "Full Body", "intermediate", "4 x 8", "60s rest", "arms | cardio"],
+    ["Bear Crawl", "Full Body", "intermediate", "4 x 8", "60s rest", "full body | core"],
+    ["Man Maker", "Full Body", "intermediate", "4 x 8", "60s rest", "full body"],
   ];
 
   // --- Session helpers --------------------------------------------------------------------------

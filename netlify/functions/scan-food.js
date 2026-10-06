@@ -12,13 +12,12 @@ const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
 const MAX_BASE64_LENGTH = 6_000_000; // roughly a 4.5MB photo once decoded
 
 const PROMPT =
-  "You are a careful nutrition analyst looking at a photo of a plate or meal. " +
-  "Look closely and list EVERY distinct food item you can see as its own entry - don't lump different foods into one item " +
-  "(e.g. list \"grilled chicken\" and \"steamed rice\" and \"broccoli\" separately, not \"chicken with rice and vegetables\"). " +
-  "For each item, estimate: a realistic portion size in grams (use the plate size, cutlery, and any hand/utensil in frame as scale references), " +
-  "and its calories, protein (g), carbs (g), and fat (g) for that portion, based on standard nutrition data for that food. " +
-  "Give your single best-estimate number for each field, not a range. " +
-  "If you cannot identify any food in the image, return an empty items array.";
+  "You are an expert nutritionist reading a photo of a meal (often Indian or home-cooked food). " +
+  "List EVERY distinct food on the plate as its own item (rice, dal, roti, sabzi, egg, chicken, salad, curd, oil/ghee, sauces...). Name each dish specifically (e.g. 'jeera rice', 'paneer butter masala', 'fried egg'). " +
+  "Estimate each portion in grams of the COOKED, served food, using the plate, bowl, spoon or hand as size references; a standard dinner plate is about 25 cm. " +
+  "Then give calories, protein, carbs and fat for that portion using standard nutrition data per 100 g, adding visible cooking oil or ghee. " +
+  "Be realistic and consistent: calories must roughly equal 4*protein + 4*carbs + 9*fat. One best-estimate number per field, no ranges. " +
+  "If there is no food in the image, return an empty items array.";
 
 const RESPONSE_SCHEMA = {
   type: "OBJECT",
@@ -45,15 +44,27 @@ const RESPONSE_SCHEMA = {
 // Gemini sometimes answers 503 "high demand" for a few seconds. Retry, then try an optional backup model.
 const MODEL_LIST = [MODEL, process.env.GEMINI_FALLBACK_MODEL].filter((m, i, a) => m && a.indexOf(m) === i);
 async function fetchWithRetry(options) {
-  let last;
+  // Netlify stops free functions at ~10 s, so answer before that: tidy "busy" beats a raw 504.
+  const deadline = Date.now() + 8300;
+  let last = new Response("busy", { status: 503 });
   for (const model of MODEL_LIST) {
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const left = deadline - Date.now();
+      if (left < 2500) return last;
       const body = JSON.parse(options.body);
       body.generationConfig = body.generationConfig || {};
       body.generationConfig.thinkingConfig = model.startsWith("gemini-3") ? { thinkingLevel: "low" } : { thinkingBudget: 0 };
-      last = await fetch(GEMINI_BASE + model + ":generateContent", { ...options, body: JSON.stringify(body) });
-      if (last.ok || ![429, 500, 502, 503, 504].includes(last.status)) return last;
-      await new Promise((resolve) => setTimeout(resolve, 700 * (attempt + 1)));
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), left - 300);
+      try {
+        last = await fetch(GEMINI_BASE + model + ":generateContent", { ...options, body: JSON.stringify(body), signal: ctl.signal });
+        clearTimeout(timer);
+        if (last.ok || ![429, 500, 502, 503, 504].includes(last.status)) return last;
+      } catch (err) {
+        clearTimeout(timer);
+        last = new Response("timeout", { status: 503 });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 400));
     }
   }
   return last;
@@ -103,8 +114,8 @@ exports.handler = async (event) => {
         generationConfig: {
           responseMimeType: "application/json",
           responseSchema: RESPONSE_SCHEMA,
-          maxOutputTokens: 1536,
-          temperature: 0.3,
+          maxOutputTokens: 900,
+          temperature: 0.2,
           thinkingConfig: { thinkingLevel: "low" },
         },
       }),
@@ -113,7 +124,7 @@ exports.handler = async (event) => {
     if (!response.ok) {
       const detail = await response.text();
       console.error("scan-food: Gemini request failed,", response.status, detail.slice(0, 500));
-      return { statusCode: 502, body: JSON.stringify({ error: "Gemini request failed", detail: detail.slice(0, 300) }) };
+      return { statusCode: [429,500,502,503,504].includes(response.status) ? 503 : 502, body: JSON.stringify({ error: "Gemini request failed", detail: detail.slice(0, 300) }) };
     }
 
     const data = await response.json();

@@ -10,15 +10,27 @@ const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
 // Gemini sometimes answers 503 "high demand" for a few seconds. Retry, then try an optional backup model.
 const MODEL_LIST = [MODEL, process.env.GEMINI_FALLBACK_MODEL].filter((m, i, a) => m && a.indexOf(m) === i);
 async function fetchWithRetry(options) {
-  let last;
+  // Netlify stops free functions at ~10 s, so answer before that: tidy "busy" beats a raw 504.
+  const deadline = Date.now() + 8300;
+  let last = new Response("busy", { status: 503 });
   for (const model of MODEL_LIST) {
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const left = deadline - Date.now();
+      if (left < 2500) return last;
       const body = JSON.parse(options.body);
       body.generationConfig = body.generationConfig || {};
       body.generationConfig.thinkingConfig = model.startsWith("gemini-3") ? { thinkingLevel: "low" } : { thinkingBudget: 0 };
-      last = await fetch(GEMINI_BASE + model + ":generateContent", { ...options, body: JSON.stringify(body) });
-      if (last.ok || ![429, 500, 502, 503, 504].includes(last.status)) return last;
-      await new Promise((resolve) => setTimeout(resolve, 700 * (attempt + 1)));
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), left - 300);
+      try {
+        last = await fetch(GEMINI_BASE + model + ":generateContent", { ...options, body: JSON.stringify(body), signal: ctl.signal });
+        clearTimeout(timer);
+        if (last.ok || ![429, 500, 502, 503, 504].includes(last.status)) return last;
+      } catch (err) {
+        clearTimeout(timer);
+        last = new Response("timeout", { status: 503 });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 400));
     }
   }
   return last;
@@ -55,7 +67,7 @@ exports.handler = async (event) => {
 
   const systemPrompt =
     "You are Jiya, a friendly and knowledgeable AI fitness trainer inside the FlexFit AI app. " +
-    "Reply in 2-4 short, practical sentences tailored to the user's own data below. " +
+    "Reply in 2-3 short, practical sentences (under 60 words) tailored to the user's own data below. " +
     "Reply in PLAIN TEXT ONLY - no Markdown, no asterisks, no bullet points, no headers, since this chat UI displays raw text. " +
     "Never give medical diagnoses; suggest a doctor or physio for injuries or pain. " +
     "User profile - level: " + (profile.level || "unknown") +
@@ -79,14 +91,14 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: systemPrompt }] },
         contents,
-        generationConfig: { maxOutputTokens: 1024, temperature: 0.7, thinkingConfig: { thinkingLevel: "low" } },
+        generationConfig: { maxOutputTokens: 400, temperature: 0.7, thinkingConfig: { thinkingLevel: "low" } },
       }),
     });
 
     if (!response.ok) {
       const detail = await response.text();
       console.error("jiya: Gemini request failed,", response.status, detail.slice(0, 500));
-      return { statusCode: 502, body: JSON.stringify({ error: "Gemini request failed", detail: detail.slice(0, 300) }) };
+      return { statusCode: [429,500,502,503,504].includes(response.status) ? 503 : 502, body: JSON.stringify({ error: "Gemini request failed", detail: detail.slice(0, 300) }) };
     }
 
     const data = await response.json();
