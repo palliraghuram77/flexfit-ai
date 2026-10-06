@@ -176,21 +176,21 @@ let cardioGpsWatch = null;
 let cardioRoute = []; // [{lat, lng, alt, t}]
 let cardioElevGain = 0;
 let cardioPaused = false;
-let cardioSelectedActivity = { name: "Running", met: 9.8, icon: "🏃" };
-const CARDIO_ACTIVITIES = [
-  { name: "Running",     met: 9.8,  icon: "🏃" },
-  { name: "Cycling",     met: 7.5,  icon: "🚴" },
-  { name: "Walking",     met: 3.5,  icon: "🚶" },
-  { name: "Hiking",      met: 6.0,  icon: "🥾" },
-  { name: "Swimming",    met: 8.0,  icon: "🏊" },
-  { name: "Rowing",      met: 7.0,  icon: "🚣" },
-  { name: "HIIT",        met: 10.0, icon: "⚡" },
-  { name: "Football",    met: 7.0,  icon: "⚽" },
-  { name: "Basketball",  met: 6.5,  icon: "🏀" },
-  { name: "Jump Rope",   met: 12.0, icon: "🪢" },
-  { name: "Yoga",        met: 3.0,  icon: "🧘" },
-  { name: "Dance",       met: 5.5,  icon: "💃" },
+let cardioSelectedActivity = { name: "Running", met: 9.8, icon: "🏃", cat: "Walk & Run", timed: false };
+const CARDIO_CATEGORIES = [
+  ["Walk & Run", false, [["Walking",3.5,"🚶"],["Brisk Walking",4.3,"🚶"],["Nordic Walking",4.8,"🚶"],["Hiking",6.0,"🥾"],["Jogging",7.0,"🏃"],["Running",9.8,"🏃"],["Trail Running",9.0,"🏔️"],["Sprinting",12.0,"💨"],["Stair Climbing",8.8,"🪜"],["Mountain Climbing",8.0,"⛰️"]]],
+  ["Cycling", false, [["Cycling",7.5,"🚴"],["Mountain Biking",8.5,"🚵"],["E-bike",4.0,"🚲"]]],
+  ["Water", false, [["Swimming",8.0,"🏊"],["Rowing",7.0,"🚣"],["Kayaking",5.0,"🛶"],["Paddleboarding",6.0,"🏄"],["Surfing",3.0,"🏄"],["Sailing",3.0,"⛵"]]],
+  ["Gym & Fitness", true, [["HIIT",10.0,"⚡"],["Jump Rope",12.0,"🪢"],["Weight Training",6.0,"🏋️"],["CrossFit",8.0,"🏋️"],["Circuit Training",8.0,"🔁"],["Calisthenics",8.0,"🤸"],["Elliptical",5.0,"🌀"],["Treadmill",9.0,"🏃"],["Stationary Bike",7.0,"🚴"],["Aerobics",6.5,"🤸"],["Zumba",6.5,"💃"],["Boot Camp",8.0,"🪖"]]],
+  ["Mind & Body", true, [["Yoga",3.0,"🧘"],["Pilates",3.0,"🧘"],["Tai Chi",3.0,"☯️"],["Stretching",2.3,"🙆"],["Barre",4.0,"🩰"],["Dance",5.5,"💃"]]],
+  ["Combat", true, [["Boxing",7.8,"🥊"],["Kickboxing",10.0,"🥊"],["Muay Thai",10.0,"🥋"],["Karate",10.0,"🥋"],["Judo",10.0,"🥋"],["Taekwondo",10.0,"🥋"],["Brazilian Jiu-Jitsu",8.0,"🤼"],["Wrestling",6.0,"🤼"],["Fencing",6.0,"🤺"]]],
+  ["Team Sports", true, [["Football",7.0,"⚽"],["Basketball",6.5,"🏀"],["Cricket",4.8,"🏏"],["Volleyball",4.0,"🏐"],["Handball",8.0,"🤾"],["Rugby",8.3,"🏉"],["Hockey",7.8,"🏑"],["Baseball",5.0,"⚾"],["American Football",8.0,"🏈"],["Ultimate Frisbee",8.0,"🥏"],["Kabaddi",7.0,"🤼"]]],
+  ["Racquet Sports", true, [["Tennis",7.3,"🎾"],["Badminton",5.5,"🏸"],["Table Tennis",4.0,"🏓"],["Squash",12.0,"🎾"],["Padel",6.0,"🎾"]]],
+  ["Winter", true, [["Skiing",7.0,"⛷️"],["Snowboarding",5.3,"🏂"],["Ice Skating",7.0,"⛸️"],["Cross-country Skiing",9.0,"⛷️"]]],
+  ["Outdoor & Other", true, [["Rock Climbing",8.0,"🧗"],["Golf",4.8,"⛳"],["Skateboarding",5.0,"🛹"],["Roller Skating",7.0,"🛼"],["Horse Riding",5.5,"🏇"],["Archery",4.3,"🏹"],["Gardening",3.8,"🌱"],["Housework",3.3,"🧹"]]],
 ];
+// "timed" activities are indoors or too stop-start for GPS, so calories come from elapsed time instead of movement.
+const CARDIO_ACTIVITIES = CARDIO_CATEGORIES.flatMap(([cat, timed, list]) => list.map(([name, met, icon]) => ({ name, met, icon, cat, timed })));
 let toastTimer = null;
 let uploadUrl = "";
 
@@ -218,6 +218,7 @@ function defaultState() {
     dayExercises: {},
     sessionProgress: {},
     customExercises: [],
+    ownWorkouts: [],
     history: [],
     recommendations: false,
   };
@@ -382,6 +383,8 @@ function changePage(page, hash = true) {
   document.body.classList.remove("menu-open");
   el("menu-button").setAttribute("aria-expanded", "false");
   if (valid === "workout") openTodaySession(); // opening Workout lands on today's session
+  if (valid === "logs") renderLogsPage();
+  if (valid === "history") renderHistory();
   el("main-content").scrollIntoView({ behavior: "instant", block: "start" });
 }
 
@@ -1357,14 +1360,17 @@ function updateLiveStats() {
 }
 
 function renderCardio() {
-  // activity type grid
-  el("activity-type-grid").innerHTML = CARDIO_ACTIVITIES.map((a) =>
-    '<button type="button" class="activity-type-btn' + (cardioSelectedActivity.name === a.name ? " active" : "") + '" data-act="' + safe(a.name) + '">' +
-    '<span class="act-icon">' + a.icon + '</span>' + a.name + '</button>'
-  ).join("");
+  // activity picker, grouped by category, with search
+  const query = (el("activity-search") ? el("activity-search").value : "").trim().toLowerCase();
+  el("activity-type-grid").innerHTML = CARDIO_CATEGORIES.map(([cat, timed, list]) => {
+    const shown = list.filter((item) => !query || item[0].toLowerCase().includes(query) || cat.toLowerCase().includes(query));
+    return shown.length ? '<h3 class="activity-cat">' + safe(cat) + (timed ? ' <small>timer-based</small>' : ' <small>GPS</small>') + '</h3><div class="activity-cat-grid">' + shown.map(([name, met, icon]) =>
+      '<button type="button" class="activity-type-btn' + (cardioSelectedActivity.name === name ? " active" : "") + '" data-act="' + safe(name) + '"><span class="act-icon">' + icon + '</span>' + safe(name) + '</button>').join("") + '</div>' : "";
+  }).join("") || '<p class="empty-state">No activity matches your search.</p>';
   all("[data-act]").forEach((btn) => btn.addEventListener("click", () => {
     cardioSelectedActivity = CARDIO_ACTIVITIES.find((a) => a.name === btn.dataset.act) || cardioSelectedActivity;
     el("selected-activity-name").textContent = cardioSelectedActivity.name;
+    el("gps-note").textContent = cardioSelectedActivity.timed ? "This activity is timer-based: calories come from your time and body weight, no GPS needed." : "GPS required - allow location access when prompted.";
     renderCardio();
   }));
   el("selected-activity-name").textContent = cardioSelectedActivity.name;
@@ -1377,7 +1383,7 @@ function renderCardio() {
   el("cardio-total-minutes").textContent = Math.round(minutes);
   if (el("cardio-total-km")) el("cardio-total-km").textContent = km.toFixed(1);
   el("cardio-history").innerHTML = state.cardioSessions.length
-    ? state.cardioSessions.slice().reverse().slice(0, 10).map((s) =>
+    ? state.cardioSessions.slice().reverse().map((s) =>
         '<div class="history-item strava-item">' +
         '<div class="strava-item-left"><span class="strava-act-icon">' + (s.icon || "🏃") + '</span>' +
         '<div><strong>' + safe(s.name) + '</strong><small>' + s.date + '</small></div></div>' +
@@ -1394,7 +1400,8 @@ let cardioMovingSeconds = 0;
 let cardioLastMoveAt = 0;
 
 function startGpsSession() {
-  if (!navigator.geolocation) {
+  const timedActivity = !!cardioSelectedActivity.timed;
+  if (!timedActivity && !navigator.geolocation) {
     toast("GPS not available on this device.");
     return;
   }
@@ -1416,12 +1423,13 @@ function startGpsSession() {
     if (!cardioPaused) {
       cardioSeconds++;
       // Only time spent actually MOVING (a real GPS position change in the last 8 s) earns calories.
-      if (Date.now() - cardioLastMoveAt < 8000) cardioMovingSeconds++;
+      if (timedActivity || Date.now() - cardioLastMoveAt < 8000) cardioMovingSeconds++;
       updateLiveStats();
     }
   }, 1000);
 
-  // GPS watch
+  // GPS watch (skipped for indoor / timer-based activities)
+  if (timedActivity) { el("map-no-gps").hidden = false; el("map-no-gps").querySelector("p").textContent = "⏱️ Timer-based activity - no GPS needed"; return; }
   cardioGpsWatch = navigator.geolocation.watchPosition(
     (pos) => {
       el("map-no-gps").hidden = true;
@@ -1467,6 +1475,7 @@ function finishGpsSession() {
       km: km,
       elevGain: cardioElevGain,
     });
+    logChange("cardio", "Finished " + cardioSelectedActivity.name + " - " + km.toFixed(2) + " km, " + Math.round(cardioCalories(cardioMovingSeconds)) + " kcal, " + fmtTime(cardioSeconds));
     saveState();
     toast("Activity saved — great work!");
   } else {
@@ -1661,6 +1670,7 @@ function closeModal() {
   el("modal-backdrop").hidden = true;
   document.querySelector(".modal").classList.remove("wide");
   el("modal-form").onsubmit = null;
+  if (typeof renderLogsPage === "function") { renderLogsPage(); renderHistory(); }
 }
 
 function openMealModal() {
@@ -1671,6 +1681,7 @@ function openMealModal() {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     state.meals.push({ id: String(Date.now()), date: today(), name: String(data.get("name")).trim(), calories: num(data.get("calories")), protein: num(data.get("protein")), carbs: num(data.get("carbs")), fat: num(data.get("fat")) });
+    logChange("food", "Logged meal " + String(data.get("name")).trim() + " (" + num(data.get("calories")) + " kcal)");
     saveState();
     closeModal();
     renderFood();
@@ -1688,6 +1699,7 @@ function openWeightModal() {
     const value = num(new FormData(event.currentTarget).get("weight"));
     state.weightHistory.push({ date: today(), weight: value });
     state.profile.weight = value;
+    logChange("weight", "Logged weight " + value + " kg");
     saveState();
     closeModal();
     renderProgress();
@@ -2047,6 +2059,79 @@ function updateConfirmMatch() {
   note.textContent = same ? "Passwords match." : "Passwords don't match yet.";
 }
 
+// ── Logs + History pages ──
+let historyFilter = "all";
+const HISTORY_ICONS = { complete: "✅", uncomplete: "↩️", plan: "🗓️", exercise: "🔁", custom: "🛠️", food: "🍽️", weight: "⚖️", cardio: "🏃", ownworkout: "🏋️" };
+const HISTORY_FILTERS = [["all", "All"], ["workout", "🏋️ Sessions"], ["plan", "🗓️ Plans"], ["exercise", "🔁 Exercises"], ["food", "🍽️ Food"], ["weight", "⚖️ Weight"], ["cardio", "🏃 Cardio"]];
+const HISTORY_GROUPS = { workout: ["complete", "uncomplete", "ownworkout"], plan: ["plan"], exercise: ["exercise", "custom"], food: ["food"], weight: ["weight"], cardio: ["cardio"] };
+
+function renderHistory() {
+  if (!el("history-list")) return;
+  el("history-filters").innerHTML = HISTORY_FILTERS.map(([key, label]) => '<button type="button" class="' + (key === historyFilter ? "active" : "") + '" data-history-filter="' + key + '">' + label + '</button>').join("");
+  all("[data-history-filter]").forEach((button) => button.addEventListener("click", () => { historyFilter = button.dataset.historyFilter; renderHistory(); }));
+  const allowed = HISTORY_GROUPS[historyFilter];
+  const items = state.history.filter((item) => !allowed || allowed.includes(item.type)).slice().reverse();
+  if (!items.length) { el("history-list").innerHTML = '<div class="empty-state">Nothing here yet. Complete a session, change your plan or log a meal and it will show up.</div>'; return; }
+  const days = [];
+  items.forEach((item) => { let day = days.find((d) => d.date === item.date); if (!day) { day = { date: item.date, rows: [] }; days.push(day); } day.rows.push(item); });
+  el("history-list").innerHTML = days.map((day) => '<h3 class="log-day">' + safe(day.date) + '</h3>' + day.rows.map((item) =>
+    '<div class="log-row"><span class="log-icon" aria-hidden="true">' + (HISTORY_ICONS[item.type] || "📌") + '</span><span class="log-text">' + safe(item.text) + '<small>' + new Date(item.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) + '</small></span></div>').join("")).join("");
+}
+
+function renderLogsPage() {
+  if (!el("logs-food")) return;
+  const dates = [...new Set(state.meals.map((m) => m.date))].sort().reverse();
+  el("logs-food").innerHTML = dates.length ? dates.map((date) => {
+    const meals = state.meals.filter((m) => m.date === date);
+    const t = mealTotals(meals);
+    return '<h3 class="log-day">' + safe(date) + ' <small>' + Math.round(t.calories) + ' kcal - P ' + Math.round(t.protein) + 'g C ' + Math.round(t.carbs) + 'g F ' + Math.round(t.fat) + 'g</small></h3>' + meals.map((m) =>
+      '<div class="log-row"><span class="log-icon" aria-hidden="true">🍽️</span><span class="log-text">' + safe(m.name) + '<small>P ' + num(m.protein) + 'g - C ' + num(m.carbs) + 'g - F ' + num(m.fat) + 'g</small></span><strong>' + num(m.calories) + ' kcal</strong><button type="button" class="log-delete" data-del-meal="' + safe(m.id) + '" aria-label="Delete ' + safe(m.name) + '">✕</button></div>').join("");
+  }).join("") : '<div class="empty-state">No meals logged yet. Tap "Log meal" above.</div>';
+  const weights = state.weightHistory.map((w, i) => ({ ...w, i }));
+  el("logs-weight").innerHTML = weights.length ? weights.slice().reverse().map((w) => {
+    const prev = w.i > 0 ? state.weightHistory[w.i - 1].weight : null;
+    const diff = prev === null ? "first entry" : (num(w.weight) - num(prev) > 0 ? "+" : "") + (num(w.weight) - num(prev)).toFixed(1) + " kg";
+    return '<div class="log-row"><span class="log-icon" aria-hidden="true">⚖️</span><span class="log-text">' + safe(w.date) + '<small>' + diff + '</small></span><strong>' + num(w.weight) + ' kg</strong><button type="button" class="log-delete" data-del-weight="' + w.i + '" aria-label="Delete weight entry">✕</button></div>';
+  }).join("") : '<div class="empty-state">No weight logged yet. Tap "Log weight" above.</div>';
+  const own = (state.ownWorkouts || []).slice().reverse();
+  const done = state.completedWorkouts.slice().reverse().slice(0, 15);
+  el("logs-workouts").innerHTML = (own.length ? '<h3 class="log-day">Your own workouts</h3>' + own.map((w) =>
+    '<div class="log-row"><span class="log-icon" aria-hidden="true">🏋️</span><span class="log-text">' + safe(w.name) + '<small>' + safe(w.date) + (w.minutes ? ' - ' + num(w.minutes) + ' min' : '') + (w.calories ? ' - ' + num(w.calories) + ' kcal' : '') + (w.exercises ? ' - ' + safe(w.exercises) : '') + (w.notes ? ' - ' + safe(w.notes) : '') + '</small></span><button type="button" class="log-delete" data-del-workout="' + safe(w.id) + '" aria-label="Delete workout">✕</button></div>').join("") : '<div class="empty-state">No workouts of your own yet. Tap "Log your own workout" above.</div>')
+    + (done.length ? '<h3 class="log-day">Completed plan sessions</h3>' + done.map((w) => '<div class="log-row"><span class="log-icon" aria-hidden="true">✅</span><span class="log-text">' + safe(w.title || "Workout") + '<small>' + safe(w.date) + '</small></span></div>').join("") : "");
+  all("[data-del-meal]").forEach((b) => b.addEventListener("click", () => {
+    const meal = state.meals.find((m) => m.id === b.dataset.delMeal);
+    state.meals = state.meals.filter((m) => m.id !== b.dataset.delMeal);
+    if (meal) logChange("food", "Deleted meal " + meal.name);
+    saveState(); renderAll();
+  }));
+  all("[data-del-weight]").forEach((b) => b.addEventListener("click", () => {
+    const entry = state.weightHistory[num(b.dataset.delWeight)];
+    state.weightHistory.splice(num(b.dataset.delWeight), 1);
+    if (entry) logChange("weight", "Deleted weight entry " + entry.weight + " kg (" + entry.date + ")");
+    saveState(); renderAll();
+  }));
+  all("[data-del-workout]").forEach((b) => b.addEventListener("click", () => {
+    const w = state.ownWorkouts.find((x) => x.id === b.dataset.delWorkout);
+    state.ownWorkouts = state.ownWorkouts.filter((x) => x.id !== b.dataset.delWorkout);
+    if (w) logChange("ownworkout", "Deleted your workout " + w.name);
+    saveState(); renderAll();
+  }));
+}
+
+function openOwnWorkoutModal() {
+  el("modal-backdrop").hidden = false;
+  el("modal-title").textContent = "Log your own workout";
+  el("modal-form").innerHTML = '<label>Workout name<input name="name" type="text" required placeholder="Evening gym session" /></label><div class="details-grid"><label>Date<input name="date" type="date" value="' + today() + '" required /></label><label>Duration (min)<input name="minutes" type="number" min="1" max="600" value="45" required /></label><label>Calories (optional)<input name="calories" type="number" min="0" /></label></div><label>Exercises (optional)<input name="exercises" type="text" placeholder="Bench 4x8, Rows 4x10, Plank 3x60s" /></label><label>Notes (optional)<input name="notes" type="text" placeholder="Felt strong today" /></label><button class="primary-button" type="submit">Save workout</button>';
+  el("modal-form").onsubmit = (event) => {
+    event.preventDefault();
+    const d = new FormData(event.currentTarget);
+    const w = { id: String(Date.now()), date: String(d.get("date")) || today(), name: String(d.get("name")).trim(), minutes: num(d.get("minutes")), calories: num(d.get("calories")), exercises: String(d.get("exercises") || "").trim(), notes: String(d.get("notes") || "").trim() };
+    state.ownWorkouts.push(w);
+    logChange("ownworkout", "Logged your own workout: " + w.name + " (" + w.minutes + " min)");
+    saveState(); closeModal(); toast("Workout logged.");
+  };
+}
+
 function events() {
   all("[data-page]").forEach((button) => button.addEventListener("click", () => changePage(button.dataset.page)));
   all("[data-nav]").forEach((link) => link.addEventListener("click", (event) => {
@@ -2252,6 +2337,10 @@ function events() {
     }
   });
   el("open-meal-modal").addEventListener("click", openMealModal);
+  el("logs-add-meal").addEventListener("click", openMealModal);
+  el("logs-add-weight").addEventListener("click", openWeightModal);
+  el("logs-add-workout").addEventListener("click", openOwnWorkoutModal);
+  if (el("activity-search")) el("activity-search").addEventListener("input", renderCardio);
   el("nutrition-ai-form").addEventListener("submit", (event) => {
     event.preventDefault();
     const input = el("ingredient-input");
@@ -2345,6 +2434,8 @@ function renderAll() {
   renderChatHistory();
   renderProgress();
   renderProfile();
+  renderLogsPage();
+  renderHistory();
 }
 
 function applyTheme() {

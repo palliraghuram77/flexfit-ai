@@ -2820,3 +2820,19 @@ body.onboarding-mode .main-content {
     padding: 12px;
   }
 }
+
+/* ── Batch 3: Logs, History, cardio categories ── */
+.logs-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+.log-day { font-size: 0.95rem; margin: 22px 0 8px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.log-day small { color: var(--muted); font-weight: 500; }
+.log-row { display: flex; align-items: center; gap: 12px; padding: 11px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; }
+.log-icon { font-size: 1.3rem; line-height: 1; }
+.log-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.log-text small { display: block; color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
+.log-delete { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 8px; width: 30px; height: 30px; cursor: pointer; }
+.log-delete:hover, .log-delete:focus-visible { color: var(--text); border-color: var(--accent); }
+#history-filters { margin-bottom: 8px; }
+.activity-cat { font-size: 0.9rem; margin: 16px 0 8px; }
+.activity-cat small { color: var(--muted); font-weight: 500; margin-left: 6px; }
+.activity-cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+#cardio-history { max-height: 460px; overflow-y: auto; }

@@ -63,7 +63,9 @@
           <button class="nav-link" type="button" data-page="food">Food</button>
           <button class="nav-link" type="button" data-page="cardio">Cardio</button>
           <button class="nav-link" type="button" data-page="jiya">Jiya AI</button>
-          <button class="nav-link" type="button" data-page="progress">Progress</button>
+          <button class="nav-link" type="button" data-page="logs">Logs</button>
+<button class="nav-link" type="button" data-page="history">History</button>
+<button class="nav-link" type="button" data-page="progress">Progress</button>
           <button class="nav-link" type="button" data-page="profile">Profile</button>
         </nav>
 
@@ -200,7 +202,8 @@
           <!-- Activity type selector (shown before session starts) -->
           <div id="cardio-setup" class="cardio-setup-panel">
             <h2>Choose Activity</h2>
-            <div class="activity-type-grid" id="activity-type-grid"></div>
+            <label class="search-field"><span class="sr-only">Search activities</span><input type="search" id="activity-search" placeholder="Search 75+ activities..." /></label>
+<div id="activity-type-grid"></div>
             <div class="cardio-start-area">
               <p class="selected-activity-label">Selected: <strong id="selected-activity-name">Running</strong></p>
               <button class="primary-button gps-start-btn" type="button" id="cardio-start-btn">
@@ -273,7 +276,26 @@
           </div>
         </section>
 
-        <section class="page" id="progress-page" data-page-view="progress" hidden>
+        <section class="page" id="logs-page" data-page-view="logs" hidden>
+<div class="page-heading"><h1>Logs</h1><p>Everything you've logged: food, weight and your own workouts.</p></div>
+<div class="logs-actions"><button class="primary-button" type="button" id="logs-add-meal">🍽️ Log meal</button><button class="outline-button" type="button" id="logs-add-weight">⚖️ Log weight</button><button class="outline-button" type="button" id="logs-add-workout">🏋️ Log your own workout</button></div>
+<div class="tabs" role="tablist" aria-label="Log types">
+<button class="tab active" type="button" role="tab" aria-selected="true" data-tab-group="logs" data-tab="food">🍽️ Food</button>
+<button class="tab" type="button" role="tab" aria-selected="false" data-tab-group="logs" data-tab="weight">⚖️ Weight</button>
+<button class="tab" type="button" role="tab" aria-selected="false" data-tab-group="logs" data-tab="workouts">🏋️ Workouts</button>
+</div>
+<div class="tab-panel active" data-panel-group="logs" data-panel="food"><div id="logs-food"></div></div>
+<div class="tab-panel" data-panel-group="logs" data-panel="weight" hidden><div id="logs-weight"></div></div>
+<div class="tab-panel" data-panel-group="logs" data-panel="workouts" hidden><div id="logs-workouts"></div></div>
+</section>
+
+<section class="page" id="history-page" data-page-view="history" hidden>
+<div class="page-heading"><h1>History</h1><p>A record of every change you make: sessions, plans, exercises, food, weight and cardio.</p></div>
+<div class="filter-row" id="history-filters" aria-label="History filters"></div>
+<div id="history-list"></div>
+</section>
+
+<section class="page" id="progress-page" data-page-view="progress" hidden>
           <div class="page-heading with-action"><div><h1>Progress</h1><p>Weight, output and consistency over time.</p></div><button class="primary-button" type="button" id="open-weight-modal">Log Weight</button></div>
           <div class="progress-layout">
             <section class="panel progress-chart-panel"><div class="panel-title"><h2>Weight history</h2></div><div class="line-chart large-chart" id="weight-chart"></div><p class="empty-chart-message" id="weight-chart-message">Log your weight to start the chart.</p></section>
