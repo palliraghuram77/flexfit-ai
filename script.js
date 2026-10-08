@@ -1617,7 +1617,7 @@ async function fetchJiyaReply(message, chat) {
     }
   }
   // Both tries failed (AI busy or offline): answer from the built-in coach, and say so.
-  return "(offline answer - " + ({ quota: "AI limit reached", busy: "AI busy", timeout: "AI slow", key: "AI key problem", model: "AI model problem" }[jiyaReason] || "AI unavailable") + ") " + coachReply(message);
+  return "(quick offline answer) " + coachReply(message);
 }
 
 async function addChat(prompt) {
@@ -1835,19 +1835,10 @@ async function imageToScanBase64(file, maxSize = 1024, quality = 0.82) {
 }
 
 function scanFailureReason(status, bodyText) {
-  let info = {};
-  try { info = JSON.parse(bodyText) || {}; } catch (e) { /* not JSON, e.g. Netlify's own 504 page */ }
-  const reason = info.reason || (status === 504 ? "timeout" : status === 429 ? "quota" : status === 404 ? "missing" : "");
-  const tag = " [" + (reason || "error") + " / " + (info.upstream || status) + "]";
-  if (reason === "busy") return "Google's AI is busy right now. Please try again in a minute." + tag;
-  if (reason === "timeout") return "The scan took too long. Try again - a closer, well-lit photo scans faster." + tag;
-  if (reason === "quota") return "The AI's usage limit has been reached for now (Gemini quota). Try again later." + tag;
-  if (reason === "key") return "The Gemini API key is missing or invalid. Check GEMINI_API_KEY in Netlify, then redeploy." + tag;
-  if (reason === "model") return "That AI model isn't available. Check GEMINI_MODEL in Netlify." + tag;
-  if (reason === "missing") return "The scanner function wasn't found (404). Make sure netlify/functions/scan-food.js is deployed." + tag;
-  if (status === 413) return "The photo was too large for the server (413).";
-  if (status === 500) return "The scanner isn't configured: GEMINI_API_KEY is missing in Netlify." + tag;
-  return "The scanner hit a problem." + tag + (info.detail ? " " + String(info.detail).slice(0, 160) : "");
+  // Friendly wording only - the technical reason is written to the Netlify function logs.
+  if (status === 413) return "That photo is too large. Try a smaller or closer photo.";
+  if (status === 404) return "The scanner isn't set up on this site yet. Please try again after some time.";
+  return "The food scanner is busy right now. Please try again after some time.";
 }
 
 async function analyzeFoodPhoto(file) {
@@ -2291,6 +2282,7 @@ function events() {
     submitButton.disabled = true;
 
     if (isSignup) {
+      signingUp = true;
       const { data, error } = await sb.auth.signUp({
         email,
         password,
@@ -2298,19 +2290,26 @@ function events() {
       });
       submitButton.disabled = false;
       if (error) {
+        signingUp = false;
         toast(error.message);
         return;
       }
       if (!data.session) {
+        signingUp = false;
         // Email confirmation is enabled on this Supabase project - there's no session yet.
         toast("Account created! Check " + email + " to confirm your address, then sign in.");
         return;
       }
       // Brand new account - always start completely clean, never leak old/default profile data.
-      state = defaultState();
-      state.session = sessionFromSupabaseUser(data.session.user);
-      const { session: _drop, ...toSave } = state;
-      await sb.from("app_state").insert({ user_id: state.session.userId, state: toSave });
+      const fresh = defaultState();
+      fresh.session = sessionFromSupabaseUser(data.session.user);
+      const { session: _drop, ...toSave } = fresh;
+      await sb.from("app_state").insert({ user_id: fresh.session.userId, state: toSave });
+      // Account is ready - send the person back to Sign In instead of logging them straight in.
+      pendingSigninEmail = email;
+      await sb.auth.signOut();
+      signingUp = false;
+      return;
     } else {
       const { data, error } = await sb.auth.signInWithPassword({ email, password });
       submitButton.disabled = false;
@@ -2513,6 +2512,20 @@ function applyTheme() {
   if (button) button.textContent = "Theme: " + current.charAt(0).toUpperCase() + current.slice(1);
 }
 
+let pendingSigninEmail = "";
+let signingUp = false; // while true, the auth listener ignores the temporary sign-in that sign-up creates
+
+// Shows the Sign In tab (used after creating an account) with the email already typed in.
+function showSigninAfterSignup() {
+  const tab = document.querySelector('[data-auth-tab="signin"]');
+  if (tab) tab.click();
+  el("auth-email").value = pendingSigninEmail;
+  el("auth-password").value = "";
+  toast("Account created! Please sign in with your email and password.");
+  el("auth-password").focus();
+  pendingSigninEmail = "";
+}
+
 function applyAuthGate() {
   const authScreen = el("auth-screen");
   const shell = el("app-shell");
@@ -2547,6 +2560,7 @@ function finishBoot() {
   changePage(window.location.hash.slice(1) || "dashboard", false);
   applyAuthGate();
   applyTheme();
+  document.documentElement.classList.remove("booting"); // reveal the page only once we know which screen to show
 }
 
 // Boots the app. A guest session (this tab only) needs no network call and takes priority.
@@ -2571,13 +2585,17 @@ function boot() {
   }
   sb.auth.onAuthStateChange(async (event, session) => {
     if (state.session.guest) return; // a guest session should never be overwritten by this
+    if (signingUp && event !== "SIGNED_OUT") return; // sign-up is in progress: stay on the sign-in screen
     if (event === "SIGNED_OUT") {
       state = defaultState();
     } else {
       await applySupabaseSession(session);
     }
+    if (event === "SIGNED_OUT") signingUp = false;
     finishBoot();
+    if (event === "SIGNED_OUT" && pendingSigninEmail) showSigninAfterSignup();
   });
+  setTimeout(() => document.documentElement.classList.remove("booting"), 3000); // safety: never leave the page hidden
 }
 
 events();
