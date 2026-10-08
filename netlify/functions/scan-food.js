@@ -96,7 +96,7 @@ exports.handler = async (event) => {
           temperature: 0.2,
         },
       }
-      , { prefer: "accurate", hedgeMs: 3500, accept: scanAccept }
+      , { prefer: "accurate", hedgeMs: 2500, accept: scanAccept }
     );
 
     if (!response.ok) {

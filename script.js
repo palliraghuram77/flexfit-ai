@@ -1595,7 +1595,8 @@ async function fetchJiyaReply(message, chat) {
     history: (chat ? chat.messages : []).filter((m) => !m.pending).slice(-6).map((m) => ({ role: m.role, text: m.text })),
   });
   let jiyaReason = "";
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  const chatStart = Date.now();
+  for (let attempt = 0; attempt < 3; attempt += 1) {
     const startedAt = Date.now();
     try {
       const ctl = new AbortController();
@@ -1614,8 +1615,8 @@ async function fetchJiyaReply(message, chat) {
       return data.reply;
     } catch (err) {
       if (!jiyaReason) jiyaReason = err && err.name === "AbortError" ? "timeout" : "down";
-      if (Date.now() - startedAt > 4000) break; // a slow failure: don't make the person wait through a second try
-      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 300)); // fast failure: quietly retry once
+      if (Date.now() - chatStart > 20000) break; // enough waiting - answer offline
+      await new Promise((resolve) => setTimeout(resolve, 400)); // quietly try again
     }
   }
   // Both tries failed (AI busy or offline): answer from the built-in coach, and say so.
@@ -1851,10 +1852,24 @@ async function analyzeFoodPhoto(file) {
   try {
     const { base64, mimeType } = await imageToScanBase64(file);
     let response;
-    for (let attempt = 1; attempt <= 2; attempt += 1) { // one silent extra try, so you never have to tap again
-      response = await fetch("/api/scan-food", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: base64, mimeType }) });
-      if (response.ok || ![502, 503, 504].includes(response.status) || attempt === 2) break;
-      await new Promise((resolve) => setTimeout(resolve, 800));
+    // One tap is enough: if Google is busy the app quietly tries again (up to 5 times, ~40 s) and
+    // only shows an error if every try failed. The person never has to press the button again.
+    const messages = ["Analyzing your photo...", "Still analyzing - reading every item on the plate...", "Almost there - working out the nutrition...", "Taking a little longer than usual - hang on...", "One last check - nearly done..."];
+    const began = Date.now();
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
+      el("scan-result").innerHTML = "<strong>" + messages[attempt - 1] + "</strong>";
+      try {
+        const ctl = new AbortController();
+        const timer = setTimeout(() => ctl.abort(), 12000);
+        response = await fetch("/api/scan-food", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: base64, mimeType }), signal: ctl.signal });
+        clearTimeout(timer);
+      } catch (netErr) {
+        if (netErr && netErr.name === "AbortError") response = { ok: false, status: 504, text: async () => "" };
+        else throw netErr;
+      }
+      if (response.ok || ![429, 500, 502, 503, 504].includes(response.status)) break;
+      if (attempt === 5 || Date.now() - began > 45000) break;
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
     if (!response.ok) {
       lastScanResult = null;
