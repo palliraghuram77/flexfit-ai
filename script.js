@@ -1594,22 +1594,30 @@ async function fetchJiyaReply(message, chat) {
     targets: state.targets,
     history: (chat ? chat.messages : []).filter((m) => !m.pending).slice(-6).map((m) => ({ role: m.role, text: m.text })),
   });
+  let jiyaReason = "";
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       const ctl = new AbortController();
       const timer = setTimeout(() => ctl.abort(), 9000); // never leave the user waiting more than ~9 s
       const response = await fetch("/api/jiya", { method: "POST", headers: { "Content-Type": "application/json" }, body: payload, signal: ctl.signal });
       clearTimeout(timer);
-      if (!response.ok) throw new Error("bad status " + response.status);
+      if (!response.ok) {
+        let why = "";
+        try { why = (await response.json()).reason || ""; } catch (e) { /* not JSON */ }
+        jiyaReason = why || (response.status === 504 ? "timeout" : "down");
+        if (["quota", "key", "model"].includes(why)) break; // retrying can't fix these
+        throw new Error("bad status " + response.status);
+      }
       const data = await response.json();
       if (!data || !data.reply) throw new Error("no reply in response");
       return data.reply;
     } catch (err) {
+      if (!jiyaReason) jiyaReason = err && err.name === "AbortError" ? "timeout" : "down";
       if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 500)); // brief pause, then retry once
     }
   }
   // Both tries failed (AI busy or offline): answer from the built-in coach, and say so.
-  return "(quick offline answer) " + coachReply(message);
+  return "(offline answer - " + ({ quota: "AI limit reached", busy: "AI busy", timeout: "AI slow", key: "AI key problem", model: "AI model problem" }[jiyaReason] || "AI unavailable") + ") " + coachReply(message);
 }
 
 async function addChat(prompt) {
@@ -1827,16 +1835,19 @@ async function imageToScanBase64(file, maxSize = 1024, quality = 0.82) {
 }
 
 function scanFailureReason(status, bodyText) {
-  let detail = "";
-  try { const parsed = JSON.parse(bodyText); detail = String(parsed.detail || parsed.error || "").slice(0, 220); } catch (e) { /* not JSON */ }
-  if ([429, 503, 504].includes(status) || /busy|high demand|UNAVAILABLE|timeout/i.test(detail)) return "The food scanner is busy right now. Please try again in a minute.";
-  if (status === 404) return "The /api/scan-food function wasn't found (404). It isn't deployed here - on Netlify check that netlify/functions/scan-food.js is in the repo, or run the site with `netlify dev` locally.";
-  if (/high demand|UNAVAILABLE|503/i.test(detail)) return "Google's AI is busy right now (high demand). The app already retried - wait a few seconds and press Scan Food with AI again.";
-  if (status === 502) return "Gemini rejected or failed the request" + (detail ? " (" + detail + ")" : "") + ". Open Netlify -> Logs -> Functions -> scan-food for Google's exact message - usually an invalid model name or API key.";
-  if (status === 500) return "The scanner function ran but failed (" + status + ")" + (detail ? ": " + detail : ".") + " The most common cause is GEMINI_API_KEY missing in Netlify -> Site configuration -> Environment variables (redeploy after adding it).";
+  let info = {};
+  try { info = JSON.parse(bodyText) || {}; } catch (e) { /* not JSON, e.g. Netlify's own 504 page */ }
+  const reason = info.reason || (status === 504 ? "timeout" : status === 429 ? "quota" : status === 404 ? "missing" : "");
+  const tag = " [" + (reason || "error") + " / " + (info.upstream || status) + "]";
+  if (reason === "busy") return "Google's AI is busy right now. Please try again in a minute." + tag;
+  if (reason === "timeout") return "The scan took too long. Try again - a closer, well-lit photo scans faster." + tag;
+  if (reason === "quota") return "The AI's usage limit has been reached for now (Gemini quota). Try again later." + tag;
+  if (reason === "key") return "The Gemini API key is missing or invalid. Check GEMINI_API_KEY in Netlify, then redeploy." + tag;
+  if (reason === "model") return "That AI model isn't available. Check GEMINI_MODEL in Netlify." + tag;
+  if (reason === "missing") return "The scanner function wasn't found (404). Make sure netlify/functions/scan-food.js is deployed." + tag;
   if (status === 413) return "The photo was too large for the server (413).";
-  if (status === 429) return "Gemini's rate limit was hit (429) - wait a minute and try again.";
-  return "The scanner returned status " + status + (detail ? ": " + detail : ".");
+  if (status === 500) return "The scanner isn't configured: GEMINI_API_KEY is missing in Netlify." + tag;
+  return "The scanner hit a problem." + tag + (info.detail ? " " + String(info.detail).slice(0, 160) : "");
 }
 
 async function analyzeFoodPhoto(file) {
@@ -1849,7 +1860,7 @@ async function analyzeFoodPhoto(file) {
     let response;
     for (let attempt = 1; attempt <= 3; attempt += 1) { // the scanner retries by itself so you don't have to
       response = await fetch("/api/scan-food", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: base64, mimeType }) });
-      if (response.ok || ![429, 502, 503, 504].includes(response.status) || attempt === 3) break;
+      if (response.ok || ![503, 504].includes(response.status) || attempt === 3) break;
       el("scan-result").innerHTML = "<strong>The scanner is busy - retrying (" + attempt + "/3)...</strong>";
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
