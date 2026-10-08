@@ -8,6 +8,17 @@
 //      }
 
 const { generate, failure } = require("./_gemini");
+
+// Only accept an answer that really contains a parsable list of food items.
+function scanAccept(data) {
+  try {
+    const parts = data.candidates[0].content.parts;
+    const raw = parts.filter((p) => !p.thought).map((p) => p.text || "").join("").trim();
+    return Array.isArray(JSON.parse(raw).items);
+  } catch (e) {
+    return false;
+  }
+}
 const MAX_BASE64_LENGTH = 6_000_000; // roughly a 4.5MB photo once decoded
 
 const PROMPT =
@@ -81,11 +92,11 @@ exports.handler = async (event) => {
         generationConfig: {
           responseMimeType: "application/json",
           responseSchema: RESPONSE_SCHEMA,
-          maxOutputTokens: 900,
+          maxOutputTokens: 1400,
           temperature: 0.2,
-          thinkingConfig: { thinkingLevel: "low" },
         },
       }
+      , { prefer: "accurate", hedgeMs: 3500, accept: scanAccept }
     );
 
     if (!response.ok) {
@@ -96,7 +107,7 @@ exports.handler = async (event) => {
 
     const data = await response.json();
     const parts = data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts;
-    const raw = Array.isArray(parts) ? parts.map((p) => p.text || "").join("").trim() : "";
+    const raw = Array.isArray(parts) ? parts.filter((p) => !p.thought).map((p) => p.text || "").join("").trim() : "";
     if (!raw) {
       console.error("scan-food: Gemini returned no text in candidates", JSON.stringify(data).slice(0, 500));
       return { statusCode: 502, body: JSON.stringify({ error: "Gemini returned an empty reply" }) };

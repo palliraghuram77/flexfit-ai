@@ -1596,9 +1596,10 @@ async function fetchJiyaReply(message, chat) {
   });
   let jiyaReason = "";
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    const startedAt = Date.now();
     try {
       const ctl = new AbortController();
-      const timer = setTimeout(() => ctl.abort(), 9000); // never leave the user waiting more than ~9 s
+      const timer = setTimeout(() => ctl.abort(), 10500); // the server answers within ~8.5 s; never wait longer than this
       const response = await fetch("/api/jiya", { method: "POST", headers: { "Content-Type": "application/json" }, body: payload, signal: ctl.signal });
       clearTimeout(timer);
       if (!response.ok) {
@@ -1613,7 +1614,8 @@ async function fetchJiyaReply(message, chat) {
       return data.reply;
     } catch (err) {
       if (!jiyaReason) jiyaReason = err && err.name === "AbortError" ? "timeout" : "down";
-      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 500)); // brief pause, then retry once
+      if (Date.now() - startedAt > 4000) break; // a slow failure: don't make the person wait through a second try
+      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 300)); // fast failure: quietly retry once
     }
   }
   // Both tries failed (AI busy or offline): answer from the built-in coach, and say so.
@@ -1811,7 +1813,7 @@ function fileToBase64(file) {
 
 // Phone photos are often 5-12 MB, and Netlify Functions reject request bodies over ~6 MB
 // (base64 also adds ~33%). Shrinking to 1024px JPEG keeps uploads small AND makes Gemini faster.
-async function imageToScanBase64(file, maxSize = 1024, quality = 0.82) {
+async function imageToScanBase64(file, maxSize = 896, quality = 0.8) {
   try {
     const url = URL.createObjectURL(file);
     const img = await new Promise((resolve, reject) => {
@@ -1849,11 +1851,10 @@ async function analyzeFoodPhoto(file) {
   try {
     const { base64, mimeType } = await imageToScanBase64(file);
     let response;
-    for (let attempt = 1; attempt <= 3; attempt += 1) { // the scanner retries by itself so you don't have to
+    for (let attempt = 1; attempt <= 2; attempt += 1) { // one silent extra try, so you never have to tap again
       response = await fetch("/api/scan-food", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: base64, mimeType }) });
-      if (response.ok || ![503, 504].includes(response.status) || attempt === 3) break;
-      el("scan-result").innerHTML = "<strong>The scanner is busy - retrying (" + attempt + "/3)...</strong>";
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      if (response.ok || ![502, 503, 504].includes(response.status) || attempt === 2) break;
+      await new Promise((resolve) => setTimeout(resolve, 800));
     }
     if (!response.ok) {
       lastScanResult = null;

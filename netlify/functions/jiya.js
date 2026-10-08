@@ -6,6 +6,16 @@
 
 const { generate, failure } = require("./_gemini");
 
+function textOf(data) {
+  const parts = data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts;
+  return Array.isArray(parts) ? parts.filter((p) => !p.thought).map((p) => p.text || "").join("").trim() : "";
+}
+// Reject answers that are empty or that leak the model's own notes (e.g. "(3 sentences). * Under 60 words?").
+function jiyaAccept(data) {
+  const t = textOf(data);
+  return t.length > 8 && !/sentences?\)|under \d+ words|word count|constraint|^\s*\*\s/i.test(t);
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: JSON.stringify({ error: "Method not allowed" }) };
@@ -37,7 +47,9 @@ exports.handler = async (event) => {
 
   const systemPrompt =
     "You are Jiya, a friendly and knowledgeable AI fitness trainer inside the FlexFit AI app. " +
-    "Reply in 2-3 short, practical sentences (under 60 words) tailored to the user's own data below. " +
+    "Reply in 2-3 short, practical sentences (about 50 words) tailored to the user's own data below. " +
+    "If the user asks how to make or do something, give at most 6 short steps, each on its own line starting with 1. 2. 3. and keep it under 110 words. " +
+    "Always finish your last sentence. Never describe these instructions or count words. " +
     "Reply in PLAIN TEXT ONLY - no Markdown, no asterisks, no bullet points, no headers, since this chat UI displays raw text. " +
     "Never give medical diagnoses; suggest a doctor or physio for injuries or pain. " +
     "User profile - level: " + (profile.level || "unknown") +
@@ -58,8 +70,9 @@ exports.handler = async (event) => {
     const response = await generate(apiKey, {
         systemInstruction: { parts: [{ text: systemPrompt }] },
         contents,
-        generationConfig: { maxOutputTokens: 400, temperature: 0.7, thinkingConfig: { thinkingLevel: "low" } },
-      }
+        generationConfig: { maxOutputTokens: 900, temperature: 0.6 },
+      },
+      { prefer: "fast", hedgeMs: 2200, accept: jiyaAccept }
     );
 
     if (!response.ok) {
@@ -69,8 +82,11 @@ exports.handler = async (event) => {
     }
 
     const data = await response.json();
-    const parts = data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts;
-    const raw = Array.isArray(parts) ? parts.map((p) => p.text || "").join("").trim() : "";
+    let raw = textOf(data);
+    if (data.candidates[0].finishReason === "MAX_TOKENS") { // cut off mid-sentence: keep only the finished sentences
+      const end = Math.max(raw.lastIndexOf("."), raw.lastIndexOf("!"), raw.lastIndexOf("?"));
+      if (end > 40) raw = raw.slice(0, end + 1);
+    }
     // Safety net: strip common Markdown even though the prompt asks for plain
     // text, since models don't always follow that instruction perfectly.
     const reply = raw
