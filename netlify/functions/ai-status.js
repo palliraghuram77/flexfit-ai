@@ -52,6 +52,23 @@ exports.handler = async (event) => {
   } else {
     report.groq = { keySet: false, hint: "Set GROQ_API_KEY in Netlify environment variables" };
   }
+  // Jiya's chat providers: which models would really be used right now, and does a test message work?
+  const chat = require("./_chat");
+  report.jiya = {};
+  const orKey = (process.env.OPENROUTER_API_KEY || "").trim();
+  async function testChat(provider, key, models) {
+    const model = models[0];
+    if (!model) return { keySet: true, ok: false, error: "no model found" };
+    const r = await chat.callCompat({
+      provider, model, key,
+      url: (provider === "groq" ? chat.GROQ_BASE : chat.OR_BASE) + "chat/completions",
+      headers: provider === "openrouter" ? { "X-Title": "FlexFit AI" } : null,
+      system: "Reply with the word ok", turns: [], message: "ok", maxTokens: 20, timeoutMs: 6000,
+    });
+    return { keySet: true, modelsInOrder: models.slice(0, 4), tested: model, ok: r.ok, status: r.status, ms: r.ms, error: r.ok ? undefined : String(r.error).slice(0, 250) };
+  }
+  report.jiya.groq = groqKey ? await testChat("groq", groqKey, await chat.groqModels(groqKey)) : { keySet: false };
+  report.jiya.openrouter = orKey ? await testChat("openrouter", orKey, await chat.openrouterModels()) : { keySet: false, hint: "Set OPENROUTER_API_KEY in Netlify environment variables (optional)" };
   const cfg = backupConfig();
   if (cfg) {
     const r = await callBackup(cfg, { text: "Reply with the word ok", timeoutMs: 6000, maxTokens: 10 });

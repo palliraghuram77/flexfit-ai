@@ -254,7 +254,7 @@ function mergeState(fallback, saved) {
     completedWorkouts: Array.isArray(saved.completedWorkouts) ? saved.completedWorkouts : [],
     weightHistory: Array.isArray(saved.weightHistory) ? saved.weightHistory : [],
     ingredients: Array.isArray(saved.ingredients) ? saved.ingredients : [],
-    jiyaChats: Array.isArray(saved.jiyaChats) ? saved.jiyaChats.filter((chat) => chat && Array.isArray(chat.messages)) : [],
+    jiyaChats: Array.isArray(saved.jiyaChats) ? saved.jiyaChats.filter((chat) => chat && Array.isArray(chat.messages)).map((chat) => ({ ...chat, messages: chat.messages.filter((m) => m && !m.pending) })) : [],
     customExercises: Array.isArray(saved.customExercises) ? saved.customExercises.filter((e) => e && typeof e.name === "string") : [],
     history: Array.isArray(saved.history) ? saved.history : [],
     dayExercises: saved.dayExercises && typeof saved.dayExercises === "object" && !Array.isArray(saved.dayExercises) ? saved.dayExercises : {},
@@ -370,10 +370,15 @@ function toast(message) {
   toastTimer = setTimeout(() => node.classList.remove("show"), 3200);
 }
 
+let currentPageName = "";
+
 function changePage(page, hash = true) {
   if (!state.session.signedIn) return;
   if (!state.onboarded) page = "profile";
   const valid = el(page + "-page") ? page : "dashboard";
+  // Leaving the Food page: clear the old scan so it is fresh when you come back.
+  if (currentPageName === "food" && valid !== "food") resetScanner();
+  currentPageName = valid;
   all("[data-page-view]").forEach((view) => {
     const active = view.dataset.pageView === valid;
     view.hidden = !active;
@@ -384,6 +389,7 @@ function changePage(page, hash = true) {
   document.body.classList.remove("menu-open");
   el("menu-button").setAttribute("aria-expanded", "false");
   if (valid === "workout") openTodaySession(); // opening Workout lands on today's session
+  if (valid === "jiya") { renderChat(); renderChatHistory(); } // same chat as you left it, scrolled to the latest message
   if (valid === "logs") renderLogsPage();
   if (valid === "history") renderHistory();
   el("main-content").scrollIntoView({ behavior: "instant", block: "start" });
@@ -1592,7 +1598,7 @@ async function fetchJiyaReply(message, chat) {
     message: message,
     profile: state.profile,
     targets: state.targets,
-    history: (chat ? chat.messages : []).filter((m) => !m.pending).slice(-6).map((m) => ({ role: m.role, text: m.text })),
+    history: (chat ? chat.messages : []).filter((m) => !m.pending).slice(-10).map((m) => ({ role: m.role, text: m.text })),
   });
   let jiyaReason = "";
   const chatStart = Date.now();
@@ -1600,7 +1606,7 @@ async function fetchJiyaReply(message, chat) {
     const startedAt = Date.now();
     try {
       const ctl = new AbortController();
-      const timer = setTimeout(() => ctl.abort(), 10500); // the server answers within ~8.5 s; never wait longer than this
+      const timer = setTimeout(() => ctl.abort(), 11500); // the server answers within ~9 s; never wait longer than this
       const response = await fetch("/api/jiya", { method: "POST", headers: { "Content-Type": "application/json" }, body: payload, signal: ctl.signal });
       clearTimeout(timer);
       if (!response.ok) {
@@ -1634,16 +1640,16 @@ async function addChat(prompt) {
   }
   chat.messages.push({ role: "user", text: clean });
   if (chat.title === "New chat") chat.title = deriveChatTitle(chat.messages);
-  chat.messages.push({ role: "jiya", text: "Thinking...", pending: true });
-  state.jiyaChats = state.jiyaChats.slice(0, 30);
+  const pendingMessage = { role: "jiya", text: "Thinking...", pending: true };
+  chat.messages.push(pendingMessage);
+  state.jiyaChats = state.jiyaChats.slice(0, 200);
   saveState();
   renderChat();
   renderChatHistory();
   const reply = await fetchJiyaReply(clean, chat);
-  const last = chat.messages[chat.messages.length - 1];
-  if (last && last.pending) {
-    last.text = reply;
-    delete last.pending;
+  if (chat.messages.includes(pendingMessage)) {
+    pendingMessage.text = reply; // fill in exactly the bubble that was waiting, even if you sent more messages meanwhile
+    delete pendingMessage.pending;
   } else {
     chat.messages.push({ role: "jiya", text: reply });
   }
@@ -1782,6 +1788,36 @@ function openExerciseInfo(name) {
 }
 
 let lastScanResult = null;
+let scanRun = 0; // goes up every time the scanner is reset or a new scan starts, so an old, late answer is ignored
+
+// Same photo = same macros. The result for each photo is remembered on this device, keyed by the photo's fingerprint.
+const SCAN_CACHE_KEY = "flexfit_scan_cache_v1";
+async function fileFingerprint(file) {
+  try {
+    if (!window.crypto || !window.crypto.subtle) return "";
+    const digest = await window.crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+    return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  } catch (e) {
+    return "";
+  }
+}
+function scanCacheGet(hash) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SCAN_CACHE_KEY) || "{}");
+    return saved[hash] ? saved[hash].data : null;
+  } catch (e) {
+    return null;
+  }
+}
+function scanCacheSet(hash, data) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SCAN_CACHE_KEY) || "{}");
+    saved[hash] = { t: Date.now(), data };
+    const keys = Object.keys(saved).sort((a, b) => saved[a].t - saved[b].t);
+    while (keys.length > 40) delete saved[keys.shift()];
+    localStorage.setItem(SCAN_CACHE_KEY, JSON.stringify(saved));
+  } catch (e) { /* storage full or blocked - the scan still works, it just is not remembered */ }
+}
 
 function demoScanResult(reason) {
   return '<strong>Couldn\'t scan this photo</strong><p class="scan-demo-note">' + safe(reason || "Something went wrong. Please try again.") + '</p>';
@@ -1844,19 +1880,25 @@ function scanFailureReason(status, bodyText) {
   return "The food scanner is busy right now. Please try again after some time.";
 }
 
-async function analyzeFoodPhoto(file) {
+async function analyzeFoodPhoto(file, run) {
   if (!file) {
     lastScanResult = null;
     return demoScanResult("No photo was selected.");
   }
   try {
+    const photoHash = await fileFingerprint(file);
+    const remembered = photoHash ? scanCacheGet(photoHash) : null;
+    if (remembered && Array.isArray(remembered.items) && remembered.items.length) {
+      lastScanResult = remembered;
+      return renderScanItems(remembered);
+    }
     const { base64, mimeType } = await imageToScanBase64(file);
     let response;
     // One tap = one scan. The server already tries Gemini and then a backup provider, so the app only
     // repeats ONCE, and only for a quick hiccup (timeout / brief outage) - never for quota or key problems.
     const messages = ["Analyzing your photo...", "Still working - reading every item on the plate..."];
     for (let attempt = 1; attempt <= 2; attempt += 1) {
-      el("scan-result").innerHTML = "<strong>" + messages[attempt - 1] + "</strong>";
+      if (run === undefined || run === scanRun) el("scan-result").innerHTML = "<strong>" + messages[attempt - 1] + "</strong>";
       try {
         const ctl = new AbortController();
         const timer = setTimeout(() => ctl.abort(), 11000);
@@ -1886,7 +1928,9 @@ async function analyzeFoodPhoto(file) {
     ["calories", "protein", "carbs", "fat"].forEach((key) => {
       if (!Number.isFinite(Number(data[key]))) data[key] = data.items.reduce((sum, item) => sum + (Number(item[key]) || 0), 0);
     });
+    if (run !== undefined && run !== scanRun) return ""; // the user left the page or picked another photo meanwhile
     lastScanResult = data;
+    if (photoHash) scanCacheSet(photoHash, data);
     return renderScanItems(data);
   } catch (err) {
     // Network error (no server at all, e.g. opened via file://) or an unreadable response.
@@ -1955,6 +1999,7 @@ function getRelevantGoals() {
 }
 
 function resetScanner() {
+  scanRun += 1; // cancels any scan still in progress
   if (typeof uploadUrl !== "undefined" && uploadUrl) { URL.revokeObjectURL(uploadUrl); uploadUrl = null; }
   lastScanResult = null;
   const input = el("food-upload"); if (input) input.value = "";
@@ -2376,6 +2421,7 @@ function events() {
     if (!file) return;
     if (uploadUrl) URL.revokeObjectURL(uploadUrl);
     uploadUrl = URL.createObjectURL(file);
+    scanRun += 1; // a new photo cancels any scan still running for the old one
     el("scan-preview").innerHTML = '<img src="' + uploadUrl + '" alt="Uploaded food plate preview" />';
     el("scan-food").disabled = false;
     el("scan-result").hidden = true;
@@ -2389,9 +2435,12 @@ function events() {
   });
   el("scan-food").addEventListener("click", async () => {
     const file = el("food-upload").files && el("food-upload").files[0];
+    const run = ++scanRun;
     el("scan-result").hidden = false;
     el("scan-result").innerHTML = "<strong>Analyzing your photo...</strong>";
-    el("scan-result").innerHTML = await analyzeFoodPhoto(file);
+    const html = await analyzeFoodPhoto(file, run);
+    if (run !== scanRun) return; // reset or replaced while waiting - ignore this late answer
+    el("scan-result").innerHTML = html;
     if (el("log-scanned-food")) {
       el("log-scanned-food").addEventListener("click", () => {
         if (!lastScanResult) return;
@@ -2412,6 +2461,7 @@ function events() {
         el("log-scanned-food").textContent = "Logged \u2713";
         el("log-scanned-food").disabled = true;
         toast("Logged to your nutrition log.");
+        setTimeout(() => { if (currentPageName === "food") resetScanner(); }, 1500); // ready for the next plate
       });
     }
   });

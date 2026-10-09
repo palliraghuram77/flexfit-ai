@@ -23,6 +23,13 @@ let backupMod = null;
 try { gemini = require("./_gemini"); } catch (e) { console.error("scan-food: _gemini.js not available -", e && e.message); }
 try { backupMod = require("./_backup"); } catch (e) { console.error("scan-food: _backup.js not available -", e && e.message); }
 
+const crypto = require("crypto");
+
+// Same photo in = same answer out. Results are remembered for a while (while this function stays warm),
+// so scanning the same photo twice can never show two different macro lists.
+const SCAN_CACHE = new Map();
+const SCAN_CACHE_MAX = 40;
+
 const MAX_BASE64_LENGTH = 6000000; // about a 4.5 MB photo once decoded
 const GROQ_MAX_BASE64 = 3900000; // Groq rejects images above about 4 MB of base64
 const TOTAL_BUDGET_MS = 9200; // Netlify free functions stop at about 10 s
@@ -235,6 +242,9 @@ function buildItem(raw) {
   const name = (rawName.charAt(0).toUpperCase() + rawName.slice(1)).slice(0, 60);
   let grams = Number(raw && raw.grams) || 0;
   grams = Math.max(0, Math.min(2000, grams));
+  // The AI's gram guess wobbles a little from run to run. Rounding to steady steps (5 g under 50 g, else 10 g)
+  // removes most of that wobble.
+  if (grams) grams = grams < 50 ? Math.max(5, Math.round(grams / 5) * 5) : Math.round(grams / 10) * 10;
   const food = matchFood(raw && raw.key, raw && raw.name);
   if (food) {
     if (!grams) grams = 100;
@@ -322,8 +332,8 @@ function geminiText(data) {
 async function callGroq(key, model, image, mimeType, timeoutMs) {
   const t0 = Date.now();
   const shapes = [
-    { response_format: { type: "json_object" }, reasoning_effort: "none" }, // JSON answer, thinking off (fast)
-    { response_format: { type: "json_object" } },
+    { response_format: { type: "json_object" }, reasoning_effort: "none", seed: 7 }, // JSON answer, thinking off (fast), repeatable
+    { response_format: { type: "json_object" }, seed: 7 },
     {},
   ];
   let last = { ok: false, status: 502, error: "no attempt made" };
@@ -335,7 +345,7 @@ async function callGroq(key, model, image, mimeType, timeoutMs) {
     try {
       const body = Object.assign({
         model,
-        temperature: 0.2,
+        temperature: 0,
         max_tokens: 1500,
         messages: [{ role: "user", content: [{ type: "text", text: PROMPT }, { type: "image_url", image_url: { url: "data:" + mimeType + ";base64," + image } }] }],
       }, extra);
@@ -402,6 +412,12 @@ exports.handler = async (event) => {
     return { statusCode: 413, body: JSON.stringify({ error: "Photo is too large - try a smaller image" }) };
   }
 
+  const imageHash = crypto.createHash("sha256").update(image).digest("hex");
+  if (SCAN_CACHE.has(imageHash)) {
+    console.log("scan-food: same photo seen before - returning the saved result");
+    return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: SCAN_CACHE.get(imageHash) };
+  }
+
   let rawItems = null;
   let provider = null;
   let firstFail = null;
@@ -438,7 +454,7 @@ exports.handler = async (event) => {
           geminiKey,
           {
             contents: [{ role: "user", parts: [{ text: PROMPT }, { inlineData: { mimeType, data: image } }] }],
-            generationConfig: { responseMimeType: "application/json", responseSchema: GEMINI_SCHEMA, maxOutputTokens: 1400, temperature: 0.2 },
+            generationConfig: { responseMimeType: "application/json", responseSchema: GEMINI_SCHEMA, maxOutputTokens: 1400, temperature: 0, seed: 7 },
           },
           { prefer: "accurate", sequential: true, maxModels: 2, deadlineMs: left, accept: (d) => !!parseItems(geminiText(d)) }
         );
@@ -479,24 +495,28 @@ exports.handler = async (event) => {
   }
 
   // The AI said what is on the plate and how much; the table does the nutrition maths.
-  const items = rawItems.filter((x) => x && typeof x === "object").map(buildItem);
+  const items = rawItems
+    .filter((x) => x && typeof x === "object")
+    .map(buildItem)
+    .sort((a, b) => b.calories - a.calories || a.name.localeCompare(b.name)); // fixed order, so the list never reshuffles
   const totals = items.reduce(
     (sum, item) => ({ calories: sum.calories + item.calories, protein: sum.protein + item.protein, carbs: sum.carbs + item.carbs, fat: sum.fat + item.fat }),
     { calories: 0, protein: 0, carbs: 0, fat: 0 }
   );
   console.log("scan-food: ok via " + provider + " in " + elapsed() + " ms, " + items.length + " items, " + items.filter((i) => i.source === "database").length + " from table");
-  return {
-    statusCode: 200,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      items,
-      calories: Math.round(totals.calories),
-      protein: Math.round(totals.protein),
-      carbs: Math.round(totals.carbs),
-      fat: Math.round(totals.fat),
-      provider,
-    }),
-  };
+  const body = JSON.stringify({
+    items,
+    calories: Math.round(totals.calories),
+    protein: Math.round(totals.protein),
+    carbs: Math.round(totals.carbs),
+    fat: Math.round(totals.fat),
+    provider,
+  });
+  if (items.length) {
+    if (SCAN_CACHE.size >= SCAN_CACHE_MAX) SCAN_CACHE.delete(SCAN_CACHE.keys().next().value);
+    SCAN_CACHE.set(imageHash, body);
+  }
+  return { statusCode: 200, headers: { "Content-Type": "application/json" }, body };
 };
 
 // Exposed only so tests/ can check the table and matching.
