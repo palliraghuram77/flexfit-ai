@@ -31,6 +31,27 @@ exports.handler = async (event) => {
   const report = { time: new Date().toISOString() };
   const key = process.env.GEMINI_API_KEY;
   report.gemini = key ? { keySet: true, tests: await Promise.all(["gemini-2.5-flash", "gemini-2.5-flash-lite"].map((m) => testGemini(key, m))) } : { keySet: false };
+  const groqKey = (process.env.GROQ_API_KEY || "").trim();
+  if (groqKey) {
+    const model = (process.env.GROQ_MODEL || "qwen/qwen3.8-27b").trim();
+    const t0 = Date.now();
+    try {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 6000);
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: "Bearer " + groqKey },
+        body: JSON.stringify({ model, max_tokens: 10, messages: [{ role: "user", content: "Reply with the word ok" }] }),
+        signal: ctl.signal,
+      });
+      clearTimeout(timer);
+      report.groq = { keySet: true, model, ok: res.ok, status: res.status, ms: Date.now() - t0, error: res.ok ? undefined : (await res.text()).slice(0, 250) };
+    } catch (err) {
+      report.groq = { keySet: true, model, ok: false, status: 0, ms: Date.now() - t0, error: err && err.name === "AbortError" ? "timed out" : String(err) };
+    }
+  } else {
+    report.groq = { keySet: false, hint: "Set GROQ_API_KEY in Netlify environment variables" };
+  }
   const cfg = backupConfig();
   if (cfg) {
     const r = await callBackup(cfg, { text: "Reply with the word ok", timeoutMs: 6000, maxTokens: 10 });
