@@ -5,6 +5,7 @@
 //   -> 200 { reply: string }
 
 const { generate, failure } = require("./_gemini");
+const { backupConfig, callBackup } = require("./_backup");
 
 function textOf(data) {
   const parts = data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts;
@@ -16,15 +17,29 @@ function jiyaAccept(data) {
   return t.length > 8 && !/sentences?\)|under \d+ words|word count|constraint|^\s*\*\s/i.test(t);
 }
 
+// Index of the last real sentence end. A list number such as "1." is NOT a sentence end.
+function lastSentenceEnd(text) {
+  let last = -1;
+  const re = /[.!?](?=\s|$)/g;
+  let m;
+  while ((m = re.exec(text))) {
+    const before = text.slice(0, m.index);
+    if (m[0] === "." && /(^|\s)\d{1,2}$/.test(before)) continue; // "1." "2." list markers
+    last = m.index;
+  }
+  return last;
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: JSON.stringify({ error: "Method not allowed" }) };
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    console.error("jiya: GEMINI_API_KEY missing");
-    return { statusCode: 500, body: JSON.stringify({ error: "GEMINI_API_KEY is not configured on the server" }) };
+  const backup = backupConfig();
+  if (!apiKey && !backup) {
+    console.error("jiya: neither GEMINI_API_KEY nor BACKUP_API_KEY is configured");
+    return { statusCode: 500, body: JSON.stringify({ error: "No AI key is configured on the server" }) };
   }
 
   let payload;
@@ -66,42 +81,66 @@ exports.handler = async (event) => {
   }));
   contents.push({ role: "user", parts: [{ text: message }] });
 
-  try {
-    const response = await generate(apiKey, {
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents,
-        generationConfig: { maxOutputTokens: 900, temperature: 0.6 },
-      },
-      { prefer: "fast", hedgeMs: 2200, accept: jiyaAccept }
-    );
+  const started = Date.now();
+  let reply = "";
+  let fail = null;
 
-    if (!response.ok) {
-      const detail = await response.text();
-      console.error("jiya: Gemini request failed,", response.status, detail.slice(0, 500));
-      return failure(response.status, detail);
+  // 1) Gemini, one model at a time (no parallel requests, so chat does not drain the quota the scanner needs).
+  if (apiKey) {
+    try {
+      const response = await generate(
+        apiKey,
+        {
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents,
+          generationConfig: { maxOutputTokens: 2000, temperature: 0.6 }, // thinking tokens count toward this cap
+        },
+        { prefer: "fast", sequential: true, maxModels: 2, deadlineMs: backup ? 5500 : 8300, accept: jiyaAccept }
+      );
+      if (response.ok) {
+        const data = await response.json();
+        let raw = textOf(data);
+        if (data.candidates[0].finishReason === "MAX_TOKENS") { // cut off mid-sentence: keep only the finished sentences
+          const end = lastSentenceEnd(raw);
+          if (end > 40) raw = raw.slice(0, end + 1);
+        }
+        reply = raw;
+      } else {
+        fail = { status: response.status, detail: await response.text() };
+        console.error("jiya: Gemini failed,", fail.status, fail.detail.slice(0, 300));
+      }
+    } catch (err) {
+      fail = { status: 502, detail: String((err && err.message) || err) };
+      console.error("jiya: Gemini error,", err && err.stack || err);
     }
-
-    const data = await response.json();
-    let raw = textOf(data);
-    if (data.candidates[0].finishReason === "MAX_TOKENS") { // cut off mid-sentence: keep only the finished sentences
-      const end = Math.max(raw.lastIndexOf("."), raw.lastIndexOf("!"), raw.lastIndexOf("?"));
-      if (end > 40) raw = raw.slice(0, end + 1);
-    }
-    // Safety net: strip common Markdown even though the prompt asks for plain
-    // text, since models don't always follow that instruction perfectly.
-    const reply = raw
-      .replace(/\*\*(.*?)\*\*/g, "$1")
-      .replace(/__(.*?)__/g, "$1")
-      .replace(/^#{1,6}\s*/gm, "")
-      .replace(/^[*-]\s+/gm, "");
-    if (!reply) {
-      console.error("jiya: Gemini returned no usable text,", JSON.stringify(data).slice(0, 500));
-      return { statusCode: 502, body: JSON.stringify({ error: "Gemini returned an empty reply" }) };
-    }
-
-    return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reply }) };
-  } catch (err) {
-    console.error("jiya: uncaught error,", err && err.stack || err);
-    return { statusCode: 502, body: JSON.stringify({ error: "Request to Gemini failed", detail: String(err && err.message || err) }) };
   }
+
+  // 2) Backup provider if Gemini gave nothing usable.
+  if (!reply && backup) {
+    const left = 9200 - (Date.now() - started);
+    if (left > 1500) {
+      const convo = history.map((t) => (t.role === "jiya" ? "Jiya: " : "User: ") + String(t.text || "").slice(0, 500)).join("\n");
+      const r = await callBackup(backup, {
+        text: systemPrompt + "\n\nConversation so far:\n" + convo + "\nUser: " + message + "\nJiya:",
+        timeoutMs: left,
+        maxTokens: 500,
+      });
+      if (r.ok && r.text) reply = r.text;
+      else if (!r.ok) {
+        fail = fail || { status: r.status, detail: r.error };
+        console.error("jiya: backup failed,", r.status, String(r.error).slice(0, 300));
+      }
+    }
+  }
+
+  // Safety net: strip common Markdown even though the prompt asks for plain text.
+  reply = reply
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/__(.*?)__/g, "$1")
+    .replace(/^#{1,6}\s*/gm, "")
+    .replace(/^[*-]\s+/gm, "");
+  if (!reply) {
+    return failure(fail ? fail.status : 503, fail ? fail.detail : "");
+  }
+  return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reply }) };
 };

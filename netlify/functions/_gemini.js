@@ -24,7 +24,7 @@ async function listModels(apiKey) {
   if (listCache && Date.now() - listCache.at < 6 * 3600 * 1000) return listCache.names;
   try {
     const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), 2000);
+    const timer = setTimeout(() => ctl.abort(), 1200);
     const res = await fetch(BASE + "models?pageSize=200", { headers: { "x-goog-api-key": apiKey }, signal: ctl.signal });
     clearTimeout(timer);
     if (!res.ok) return null;
@@ -42,7 +42,7 @@ async function listModels(apiKey) {
 }
 
 // prefer "fast" (chat) puts flash-lite first; "accurate" (photos) puts flash first.
-async function candidateModels(apiKey, prefer) {
+async function candidateModels(apiKey, prefer, maxModels) {
   const wanted = [process.env.GEMINI_MODEL, process.env.GEMINI_FALLBACK_MODEL].map(clean).filter(Boolean);
   const pins = prefer === "fast" ? ["gemini-2.5-flash-lite", "gemini-2.5-flash"] : ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
   const available = await listModels(apiKey); // null when the list could not be fetched
@@ -54,7 +54,7 @@ async function candidateModels(apiKey, prefer) {
   });
   list = list.concat(pins.filter(ok));
   if (available) list = list.concat(available);
-  return list.filter((m, i, a) => a.indexOf(m) === i && !badModels.has(m)).slice(0, 3);
+  return list.filter((m, i, a) => a.indexOf(m) === i && !badModels.has(m)).slice(0, maxModels || 3);
 }
 
 function needsNoThinking(model) {
@@ -65,10 +65,11 @@ function needsNoThinking(model) {
 // is started AT THE SAME TIME and whichever answers first (and passes accept) wins - so one tap is enough.
 // Returns a Response (check .ok).
 async function generate(apiKey, requestBody, opts = {}) {
-  const deadline = Date.now() + DEADLINE_MS;
+  const deadline = Date.now() + (opts.deadlineMs || DEADLINE_MS);
   const hedgeMs = opts.hedgeMs || 2500;
+  const sequential = !!opts.sequential; // true = never send parallel requests; next model only after the previous one failed
   const accept = opts.accept || (() => true);
-  const models = await candidateModels(apiKey, opts.prefer);
+  const models = await candidateModels(apiKey, opts.prefer, opts.maxModels);
   return new Promise((resolve) => {
     let next = 0;
     let running = 0;
@@ -143,7 +144,7 @@ async function generate(apiKey, requestBody, opts = {}) {
         if (res) finish(res);
         else launch();
       });
-      hedgeTimer = setTimeout(launch, hedgeMs);
+      if (!sequential) hedgeTimer = setTimeout(launch, hedgeMs);
     };
     launch();
   });

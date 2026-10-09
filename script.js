@@ -1596,7 +1596,7 @@ async function fetchJiyaReply(message, chat) {
   });
   let jiyaReason = "";
   const chatStart = Date.now();
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
     const startedAt = Date.now();
     try {
       const ctl = new AbortController();
@@ -1852,24 +1852,25 @@ async function analyzeFoodPhoto(file) {
   try {
     const { base64, mimeType } = await imageToScanBase64(file);
     let response;
-    // One tap is enough: if Google is busy the app quietly tries again (up to 5 times, ~40 s) and
-    // only shows an error if every try failed. The person never has to press the button again.
-    const messages = ["Analyzing your photo...", "Still analyzing - reading every item on the plate...", "Almost there - working out the nutrition...", "Taking a little longer than usual - hang on...", "One last check - nearly done..."];
-    const began = Date.now();
-    for (let attempt = 1; attempt <= 5; attempt += 1) {
+    // One tap = one scan. The server already tries Gemini and then a backup provider, so the app only
+    // repeats ONCE, and only for a quick hiccup (timeout / brief outage) - never for quota or key problems.
+    const messages = ["Analyzing your photo...", "Still working - reading every item on the plate..."];
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
       el("scan-result").innerHTML = "<strong>" + messages[attempt - 1] + "</strong>";
       try {
         const ctl = new AbortController();
-        const timer = setTimeout(() => ctl.abort(), 12000);
+        const timer = setTimeout(() => ctl.abort(), 11000);
         response = await fetch("/api/scan-food", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: base64, mimeType }), signal: ctl.signal });
         clearTimeout(timer);
       } catch (netErr) {
         if (netErr && netErr.name === "AbortError") response = { ok: false, status: 504, text: async () => "" };
         else throw netErr;
       }
-      if (response.ok || ![429, 500, 502, 503, 504].includes(response.status)) break;
-      if (attempt === 5 || Date.now() - began > 45000) break;
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (response.ok) break;
+      let why = "";
+      try { why = (await response.clone().json()).reason || ""; } catch (e) { /* not JSON */ }
+      if (attempt === 2 || ["quota", "key"].includes(why) || ![502, 503, 504].includes(response.status)) break;
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
     if (!response.ok) {
       lastScanResult = null;

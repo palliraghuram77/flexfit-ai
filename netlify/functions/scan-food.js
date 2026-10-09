@@ -8,6 +8,7 @@
 //      }
 
 const { generate, failure } = require("./_gemini");
+const { backupConfig, callBackup, extractJson } = require("./_backup");
 
 // Only accept an answer that really contains a parsable list of food items.
 function scanAccept(data) {
@@ -51,15 +52,35 @@ const RESPONSE_SCHEMA = {
   required: ["items"],
 };
 
+const BACKUP_JSON_HINT =
+  '\n\nReply with ONLY a JSON object, no other text, in exactly this shape: ' +
+  '{"items":[{"name":"","grams":0,"calories":0,"protein":0,"carbs":0,"fat":0}]}';
+const TOTAL_BUDGET_MS = 9200; // Netlify free functions stop at ~10 s
+
+function cleanItems(parsed) {
+  return Array.isArray(parsed && parsed.items)
+    ? parsed.items.slice(0, 15).map((item) => ({
+        name: String((item && item.name) || "Item").slice(0, 60),
+        grams: Number(item && item.grams) || 0,
+        calories: Number(item && item.calories) || 0,
+        protein: Number(item && item.protein) || 0,
+        carbs: Number(item && item.carbs) || 0,
+        fat: Number(item && item.fat) || 0,
+      }))
+    : null;
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: JSON.stringify({ error: "Method not allowed" }) };
   }
 
+  const started = Date.now();
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    console.error("scan-food: GEMINI_API_KEY missing");
-    return { statusCode: 500, body: JSON.stringify({ error: "GEMINI_API_KEY is not configured on the server" }) };
+  const backup = backupConfig();
+  if (!apiKey && !backup) {
+    console.error("scan-food: neither GEMINI_API_KEY nor BACKUP_API_KEY is configured");
+    return { statusCode: 500, body: JSON.stringify({ error: "No AI key is configured on the server" }) };
   }
 
   let payload;
@@ -81,82 +102,80 @@ exports.handler = async (event) => {
     return { statusCode: 413, body: JSON.stringify({ error: "Photo is too large - try a smaller image" }) };
   }
 
-  try {
-    const response = await generate(apiKey, {
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: PROMPT }, { inlineData: { mimeType, data: image } }],
-          },
-        ],
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: RESPONSE_SCHEMA,
-          maxOutputTokens: 1400,
-          temperature: 0.2,
-        },
-      }
-      , { prefer: "accurate", hedgeMs: 2500, accept: scanAccept }
-    );
+  let items = null;
+  let provider = null;
+  let geminiFail = null; // { status, detail }
+  let backupFail = null;
 
-    if (!response.ok) {
-      const detail = await response.text();
-      console.error("scan-food: Gemini request failed,", response.status, detail.slice(0, 500));
-      return failure(response.status, detail);
-    }
-
-    const data = await response.json();
-    const parts = data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts;
-    const raw = Array.isArray(parts) ? parts.filter((p) => !p.thought).map((p) => p.text || "").join("").trim() : "";
-    if (!raw) {
-      console.error("scan-food: Gemini returned no text in candidates", JSON.stringify(data).slice(0, 500));
-      return { statusCode: 502, body: JSON.stringify({ error: "Gemini returned an empty reply" }) };
-    }
-
-    let parsed;
+  // 1) Gemini: one model at a time (never parallel, so one tap = as few API calls as possible).
+  //    If a backup exists, Gemini only gets ~5 s so the backup still has time to answer.
+  if (apiKey) {
     try {
-      parsed = JSON.parse(raw);
-    } catch {
-      console.error("scan-food: could not JSON.parse Gemini output:", raw.slice(0, 500));
-      return { statusCode: 502, body: JSON.stringify({ error: "Gemini did not return valid JSON" }) };
+      const response = await generate(
+        apiKey,
+        {
+          contents: [{ role: "user", parts: [{ text: PROMPT }, { inlineData: { mimeType, data: image } }] }],
+          generationConfig: { responseMimeType: "application/json", responseSchema: RESPONSE_SCHEMA, maxOutputTokens: 1400, temperature: 0.2 },
+        },
+        { prefer: "accurate", sequential: true, maxModels: 2, deadlineMs: backup ? 5200 : 8300, accept: scanAccept }
+      );
+      if (response.ok) {
+        const data = await response.json();
+        const parts = data.candidates[0].content.parts;
+        const raw = parts.filter((p) => !p.thought).map((p) => p.text || "").join("").trim();
+        items = cleanItems(JSON.parse(raw));
+        if (items) provider = "gemini";
+      } else {
+        geminiFail = { status: response.status, detail: await response.text() };
+        console.error("scan-food: Gemini failed,", geminiFail.status, geminiFail.detail.slice(0, 300));
+      }
+    } catch (err) {
+      geminiFail = { status: 502, detail: String((err && err.message) || err) };
+      console.error("scan-food: Gemini error,", err && err.stack || err);
     }
-
-    const items = Array.isArray(parsed.items)
-      ? parsed.items.slice(0, 15).map((item) => ({
-          name: String((item && item.name) || "Item").slice(0, 60),
-          grams: Number(item && item.grams) || 0,
-          calories: Number(item && item.calories) || 0,
-          protein: Number(item && item.protein) || 0,
-          carbs: Number(item && item.carbs) || 0,
-          fat: Number(item && item.fat) || 0,
-        }))
-      : [];
-
-    // Sum totals ourselves rather than trusting a separate model-stated total,
-    // so the totals always match what's actually shown per item.
-    const totals = items.reduce(
-      (sum, item) => ({
-        calories: sum.calories + item.calories,
-        protein: sum.protein + item.protein,
-        carbs: sum.carbs + item.carbs,
-        fat: sum.fat + item.fat,
-      }),
-      { calories: 0, protein: 0, carbs: 0, fat: 0 }
-    );
-
-    return {
-      statusCode: 200,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        items,
-        calories: Math.round(totals.calories),
-        protein: Math.round(totals.protein),
-        carbs: Math.round(totals.carbs),
-        fat: Math.round(totals.fat),
-      }),
-    };
-  } catch (err) {
-    console.error("scan-food: uncaught error,", err && err.stack || err);
-    return { statusCode: 502, body: JSON.stringify({ error: "Request to Gemini failed", detail: String(err && err.message || err) }) };
   }
+
+  // 2) Backup provider, only if Gemini did not give a usable answer.
+  if (!items && backup) {
+    const left = TOTAL_BUDGET_MS - (Date.now() - started);
+    if (left > 1500) {
+      const r = await callBackup(backup, { text: PROMPT + BACKUP_JSON_HINT, image, mimeType, timeoutMs: left, maxTokens: 1400, json: true });
+      if (r.ok) {
+        items = cleanItems(extractJson(r.text));
+        if (items) provider = backup.provider;
+        else console.error("scan-food: backup returned unusable text:", r.text.slice(0, 300));
+      } else {
+        backupFail = r;
+        console.error("scan-food: backup failed,", r.status, String(r.error).slice(0, 300));
+      }
+    }
+  }
+
+  if (!items) {
+    const f = geminiFail || { status: backupFail ? backupFail.status : 503, detail: backupFail ? backupFail.error : "" };
+    const out = failure(f.status, f.detail);
+    const b = JSON.parse(out.body);
+    b.backupStatus = backupFail ? backupFail.status : backup ? "unusable" : "not configured";
+    out.body = JSON.stringify(b);
+    return out;
+  }
+
+  // Sum totals ourselves so they always match the per-item numbers shown.
+  const totals = items.reduce(
+    (sum, item) => ({ calories: sum.calories + item.calories, protein: sum.protein + item.protein, carbs: sum.carbs + item.carbs, fat: sum.fat + item.fat }),
+    { calories: 0, protein: 0, carbs: 0, fat: 0 }
+  );
+  console.log("scan-food: ok via " + provider + " in " + (Date.now() - started) + " ms");
+  return {
+    statusCode: 200,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      items,
+      calories: Math.round(totals.calories),
+      protein: Math.round(totals.protein),
+      carbs: Math.round(totals.carbs),
+      fat: Math.round(totals.fat),
+      provider,
+    }),
+  };
 };
